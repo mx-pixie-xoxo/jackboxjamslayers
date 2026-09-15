@@ -64,10 +64,16 @@ public class RoundManager : NetworkBehaviour
 
     public static bool TryGetLocalPlayerId(out PlayerID id)
     {
+        // NetworkManager.playerModule prefers the server's PlayersManager
+        // whenever one exists, which is always null on a listen-server host
+        // (the server's own module never receives a login response - only
+        // its client-role module does). Ask for the client-role module
+        // explicitly so this also resolves correctly for the host.
         var nm = NetworkManager.main;
-        if (nm != null && nm.playerModule != null && nm.playerModule.localPlayerId.HasValue)
+        if (nm != null && nm.TryGetModule<PlayersManager>(false, out var clientPlayers) &&
+            clientPlayers.localPlayerId.HasValue)
         {
-            id = nm.playerModule.localPlayerId.Value;
+            id = clientPlayers.localPlayerId.Value;
             return true;
         }
 
@@ -116,6 +122,16 @@ public class RoundManager : NetworkBehaviour
 
         if (!_scores.ContainsKey(player))
             _scores[player] = 0;
+
+        // A player who finishes loading after the round already started still
+        // needs a turn later, and still needs to count as audience - without
+        // this they'd be silently skipped forever.
+        if (phase.value != RoundPhase.WaitingForPlayers &&
+            activePlayerId.value != player &&
+            !_unpickedActivePlayers.Contains(player))
+        {
+            _unpickedActivePlayers.Add(player);
+        }
 
         TryBeginRoundIfReady();
     }
@@ -194,6 +210,28 @@ public class RoundManager : NetworkBehaviour
         onLocalGoalReceived?.Invoke(goalMin, goalMax);
     }
 
+    /// <summary>
+    /// Lets the active player's own UI explicitly pull its secret goal
+    /// instead of only relying on the one-shot push from BeginTargeting -
+    /// that push can race a client whose own scene load/UI subscription is
+    /// still settling (most likely right at game start). Safe to call any
+    /// number of times; only re-sends to whoever actually is active.
+    /// </summary>
+    [ServerRpc(requireOwnership: false)]
+    public void Rpc_RequestSecretGoal(RPCInfo info = default)
+    {
+        if (phase.value != RoundPhase.Targeting)
+            return;
+
+        if (!activePlayerId.value.HasValue || activePlayerId.value.Value != info.sender)
+            return;
+
+        if (!_currentGoalRange.HasValue)
+            return;
+
+        Target_ReceiveSecretGoal(info.sender, _currentGoalRange.Value.min, _currentGoalRange.Value.max);
+    }
+
     [ServerRpc(requireOwnership: false)]
     public void Rpc_SubmitEndpointLabel(bool isLeft, string newLabel, RPCInfo info = default)
     {
@@ -219,6 +257,13 @@ public class RoundManager : NetworkBehaviour
         _pendingVotes.Clear();
         _votedThisTurn.Clear();
         votesSubmittedCount.value = 0;
+
+        // Recompute from the live roster rather than trusting the snapshot
+        // taken at round start - a straggler who joined a moment late must
+        // still be counted as part of the audience.
+        if (networkManager.TryGetModule<PlayersManager>(true, out var players))
+            totalPlayers.value = players.players.Count;
+
         votesExpectedCount.value = Mathf.Max(0, totalPlayers.value - 1);
         phase.value = RoundPhase.VotingOpen;
 
@@ -271,18 +316,14 @@ public class RoundManager : NetworkBehaviour
     {
         phase.value = RoundPhase.Scoring;
 
+        // Only the active player scores, based on how close the pendulum's
+        // final position landed to their secret goal range. Audience members
+        // don't earn points for voting.
         if (_currentGoalRange.HasValue && activePlayerId.value.HasValue)
         {
             var (min, max) = _currentGoalRange.Value;
-
             int activeDelta = ScoreFromDistance(DistanceToRange(pendulumValue.value, min, max));
             ApplyScore(activePlayerId.value.Value, activeDelta);
-
-            foreach (var kvp in _pendingVotes)
-            {
-                int delta = ScoreFromDistance(DistanceToRange(kvp.Value, min, max));
-                ApplyScore(kvp.Key, delta);
-            }
         }
 
         _currentGoalRange = null;

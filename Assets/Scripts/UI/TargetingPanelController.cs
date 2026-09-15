@@ -19,6 +19,7 @@ public class TargetingPanelController : MonoBehaviour
 
     private RoundManager _round;
     private bool _isLeft = true;
+    private bool _wasMyTurn;
 
     private void Update()
     {
@@ -78,6 +79,13 @@ public class TargetingPanelController : MonoBehaviour
                         RoundManager.TryGetLocalPlayerId(out var localId) &&
                         _round.activePlayerId.value.Value == localId;
 
+        // Pull the secret goal the moment it becomes our turn, rather than
+        // only trusting the one-shot push from the server - covers the case
+        // where that push raced ahead of this panel finishing its own setup.
+        if (isMyTurn && !_wasMyTurn)
+            _round.Rpc_RequestSecretGoal();
+
+        _wasMyTurn = isMyTurn;
         _panelRoot.SetActive(isMyTurn);
     }
 
