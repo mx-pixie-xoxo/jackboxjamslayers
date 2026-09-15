@@ -1,0 +1,345 @@
+using System;
+using System.Collections.Generic;
+using PurrNet;
+using PurrNet.Modules;
+using UnityEngine;
+
+/// <summary>
+/// Server-authoritative referee for a full game: rotates the active player,
+/// hands out the secret goal range, collects votes, reveals results, and
+/// scores each turn. Lives as a scene object in MainGame.unity (PurrNet
+/// auto-spawns NetworkBehaviours already placed in a scene - no prefab or
+/// runtime Instantiate needed).
+///
+/// Hidden information (the active player's secret goal, each vote before
+/// reveal, everyone's score) never becomes a SyncVar - it lives only in
+/// plain server-only fields below and is pushed to the right client via
+/// TargetRpc. That's the entire privacy mechanism; nothing else is needed.
+/// </summary>
+public class RoundManager : NetworkBehaviour
+{
+    public static RoundManager instance { get; private set; }
+
+    [Header("Round Content (placeholder)")]
+    [SerializeField] private string _defaultPrompt = "Place a fifth grader within this scale of intelligence";
+    [SerializeField] private string _defaultLeftLabel = "Puppy";
+    [SerializeField] private string _defaultRightLabel = "Seventh grader";
+
+    [Header("Scoring (placeholder tuning - needs a real pass)")]
+    [SerializeField] private int _maxPointsPerTurn = 100;
+    [SerializeField] private float _minGoalWidth = 0.1f;
+    [SerializeField] private float _maxGoalWidth = 0.2f;
+
+    // Public, server-authoritative, synced to every observer by default -
+    // safe to be public because none of this is secret.
+    public SyncVar<RoundPhase> phase = new SyncVar<RoundPhase>(RoundPhase.WaitingForPlayers);
+    public SyncVar<string> promptText = new SyncVar<string>("");
+    public SyncVar<string> leftLabel = new SyncVar<string>("");
+    public SyncVar<string> rightLabel = new SyncVar<string>("");
+    public SyncVar<PlayerID?> activePlayerId = new SyncVar<PlayerID?>(null);
+    public SyncVar<int> votesSubmittedCount = new SyncVar<int>(0);
+    public SyncVar<int> votesExpectedCount = new SyncVar<int>(0);
+    public SyncVar<float> pendulumValue = new SyncVar<float>(0.5f);
+    public SyncVar<int> turnNumber = new SyncVar<int>(0);
+    public SyncVar<int> totalPlayers = new SyncVar<int>(0);
+
+    // Server-only. Never synced, never broadcast except through the
+    // explicit RPCs below - this is what keeps everything else hidden.
+    private readonly List<PlayerID> _unpickedActivePlayers = new List<PlayerID>();
+    private (float min, float max)? _currentGoalRange;
+    private readonly Dictionary<PlayerID, float> _pendingVotes = new Dictionary<PlayerID, float>();
+    private readonly HashSet<PlayerID> _votedThisTurn = new HashSet<PlayerID>();
+    private readonly Dictionary<PlayerID, int> _scores = new Dictionary<PlayerID, int>();
+
+    // Local-only mirrors: only ever populated on the one client an RPC
+    // actually targeted. UI binds to these events, never to another
+    // player's data.
+    public (float min, float max)? localSecretGoal { get; private set; }
+    public int localScore { get; private set; }
+
+    public event Action<float, float> onLocalGoalReceived;
+    public event Action<int, int> onLocalScoreChanged;
+    public event Action<PlayerID, float> onVoteRevealed;
+    public event Action<PlayerID, int> onFinalScoreRevealed;
+
+    public static bool TryGetLocalPlayerId(out PlayerID id)
+    {
+        var nm = NetworkManager.main;
+        if (nm != null && nm.playerModule != null && nm.playerModule.localPlayerId.HasValue)
+        {
+            id = nm.playerModule.localPlayerId.Value;
+            return true;
+        }
+
+        id = default;
+        return false;
+    }
+
+    protected override void OnSpawned(bool asServer)
+    {
+        base.OnSpawned(asServer);
+        instance = this;
+
+        if (!asServer)
+            return;
+
+        networkManager.onPlayerLoadedScene += OnPlayerLoadedScene;
+        networkManager.onPlayerUnloadedScene += OnPlayerUnloadedScene;
+
+        TryBeginRoundIfReady();
+    }
+
+    protected override void OnDestroy()
+    {
+        if (instance == this)
+            instance = null;
+
+        var nm = NetworkManager.main;
+        if (nm != null)
+        {
+            nm.onPlayerLoadedScene -= OnPlayerLoadedScene;
+            nm.onPlayerUnloadedScene -= OnPlayerUnloadedScene;
+        }
+
+        base.OnDestroy();
+    }
+
+    private bool IsThisScene(SceneID scene)
+    {
+        return networkManager.sceneModule.TryGetSceneID(gameObject.scene, out var sceneID) && sceneID == scene;
+    }
+
+    private void OnPlayerLoadedScene(PlayerID player, SceneID scene, bool asServer)
+    {
+        if (!asServer || !IsThisScene(scene))
+            return;
+
+        if (!_scores.ContainsKey(player))
+            _scores[player] = 0;
+
+        TryBeginRoundIfReady();
+    }
+
+    private void OnPlayerUnloadedScene(PlayerID player, SceneID scene, bool asServer)
+    {
+        if (!asServer)
+            return;
+
+        _unpickedActivePlayers.Remove(player);
+        _pendingVotes.Remove(player);
+        _votedThisTurn.Remove(player);
+    }
+
+    private void TryBeginRoundIfReady()
+    {
+        if (!isServer || phase.value != RoundPhase.WaitingForPlayers)
+            return;
+
+        if (!networkManager.TryGetModule<PlayersManager>(true, out var players) || players.players.Count < 2)
+            return;
+
+        BeginRound(players.players);
+    }
+
+    private void BeginRound(IReadOnlyList<PlayerID> roster)
+    {
+        promptText.value = _defaultPrompt;
+        leftLabel.value = _defaultLeftLabel;
+        rightLabel.value = _defaultRightLabel;
+
+        _unpickedActivePlayers.Clear();
+        _unpickedActivePlayers.AddRange(roster);
+        Shuffle(_unpickedActivePlayers);
+
+        totalPlayers.value = roster.Count;
+        turnNumber.value = 0;
+
+        foreach (var p in roster)
+        {
+            if (!_scores.ContainsKey(p))
+                _scores[p] = 0;
+        }
+
+        phase.value = RoundPhase.RoundIntro;
+        BeginTargeting();
+    }
+
+    private void BeginTargeting()
+    {
+        if (_unpickedActivePlayers.Count == 0)
+        {
+            EndGame();
+            return;
+        }
+
+        var next = _unpickedActivePlayers[_unpickedActivePlayers.Count - 1];
+        _unpickedActivePlayers.RemoveAt(_unpickedActivePlayers.Count - 1);
+
+        turnNumber.value++;
+        activePlayerId.value = next;
+
+        float goalWidth = UnityEngine.Random.Range(_minGoalWidth, _maxGoalWidth);
+        float goalMin = UnityEngine.Random.Range(0f, 1f - goalWidth);
+        _currentGoalRange = (goalMin, goalMin + goalWidth);
+
+        phase.value = RoundPhase.Targeting;
+
+        Target_ReceiveSecretGoal(next, _currentGoalRange.Value.min, _currentGoalRange.Value.max);
+    }
+
+    [TargetRpc]
+    private void Target_ReceiveSecretGoal(PlayerID target, float goalMin, float goalMax)
+    {
+        localSecretGoal = (goalMin, goalMax);
+        onLocalGoalReceived?.Invoke(goalMin, goalMax);
+    }
+
+    [ServerRpc(requireOwnership: false)]
+    public void Rpc_SubmitEndpointLabel(bool isLeft, string newLabel, RPCInfo info = default)
+    {
+        if (phase.value != RoundPhase.Targeting)
+            return;
+
+        if (!activePlayerId.value.HasValue || activePlayerId.value.Value != info.sender)
+            return;
+
+        if (string.IsNullOrWhiteSpace(newLabel))
+            return;
+
+        if (isLeft)
+            leftLabel.value = newLabel;
+        else
+            rightLabel.value = newLabel;
+
+        OpenVoting();
+    }
+
+    private void OpenVoting()
+    {
+        _pendingVotes.Clear();
+        _votedThisTurn.Clear();
+        votesSubmittedCount.value = 0;
+        votesExpectedCount.value = Mathf.Max(0, totalPlayers.value - 1);
+        phase.value = RoundPhase.VotingOpen;
+
+        if (votesExpectedCount.value <= 0)
+            Reveal();
+    }
+
+    [ServerRpc(requireOwnership: false)]
+    public void Rpc_SubmitVote(float normalizedPosition, RPCInfo info = default)
+    {
+        if (phase.value != RoundPhase.VotingOpen)
+            return;
+
+        if (activePlayerId.value.HasValue && activePlayerId.value.Value == info.sender)
+            return;
+
+        if (!_votedThisTurn.Add(info.sender))
+            return;
+
+        _pendingVotes[info.sender] = Mathf.Clamp01(normalizedPosition);
+        votesSubmittedCount.value = _votedThisTurn.Count;
+
+        if (votesSubmittedCount.value >= votesExpectedCount.value)
+            Reveal();
+    }
+
+    private void Reveal()
+    {
+        phase.value = RoundPhase.Revealing;
+
+        float sum = 0f;
+        foreach (var kvp in _pendingVotes)
+        {
+            sum += kvp.Value;
+            Rpc_RevealOneVote(kvp.Key, kvp.Value);
+        }
+
+        pendulumValue.value = _pendingVotes.Count > 0 ? sum / _pendingVotes.Count : 0.5f;
+
+        ScoreTurn();
+    }
+
+    [ObserversRpc]
+    private void Rpc_RevealOneVote(PlayerID voterId, float position)
+    {
+        onVoteRevealed?.Invoke(voterId, position);
+    }
+
+    private void ScoreTurn()
+    {
+        phase.value = RoundPhase.Scoring;
+
+        if (_currentGoalRange.HasValue && activePlayerId.value.HasValue)
+        {
+            var (min, max) = _currentGoalRange.Value;
+
+            int activeDelta = ScoreFromDistance(DistanceToRange(pendulumValue.value, min, max));
+            ApplyScore(activePlayerId.value.Value, activeDelta);
+
+            foreach (var kvp in _pendingVotes)
+            {
+                int delta = ScoreFromDistance(DistanceToRange(kvp.Value, min, max));
+                ApplyScore(kvp.Key, delta);
+            }
+        }
+
+        _currentGoalRange = null;
+        phase.value = RoundPhase.TurnComplete;
+        BeginTargeting();
+    }
+
+    private void ApplyScore(PlayerID player, int delta)
+    {
+        _scores.TryGetValue(player, out var current);
+        int updated = current + delta;
+        _scores[player] = updated;
+        Target_ReceiveTurnScoreDelta(player, delta, updated);
+    }
+
+    [TargetRpc]
+    private void Target_ReceiveTurnScoreDelta(PlayerID target, int delta, int newTotal)
+    {
+        localScore = newTotal;
+        onLocalScoreChanged?.Invoke(delta, newTotal);
+    }
+
+    private void EndGame()
+    {
+        foreach (var kvp in _scores)
+            Rpc_RevealOneFinalScore(kvp.Key, kvp.Value);
+
+        phase.value = RoundPhase.GameOver;
+    }
+
+    [ObserversRpc]
+    private void Rpc_RevealOneFinalScore(PlayerID playerId, int finalScore)
+    {
+        onFinalScoreRevealed?.Invoke(playerId, finalScore);
+    }
+
+    private static float DistanceToRange(float value, float min, float max)
+    {
+        if (value < min) return min - value;
+        if (value > max) return value - max;
+        return 0f;
+    }
+
+    private int ScoreFromDistance(float distance)
+    {
+        // Placeholder linear falloff - the GDD states the relationship
+        // (closer = more points) but not a formula. Needs a tuning pass.
+        float t = Mathf.Clamp01(1f - distance * 2f);
+        return Mathf.RoundToInt(t * _maxPointsPerTurn);
+    }
+
+    private static void Shuffle(IList<PlayerID> list)
+    {
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int j = UnityEngine.Random.Range(0, i + 1);
+            (list[i], list[j]) = (list[j], list[i]);
+        }
+    }
+}
