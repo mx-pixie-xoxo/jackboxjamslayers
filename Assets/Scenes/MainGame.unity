@@ -826,7 +826,7 @@ Transform:
   m_GameObject: {fileID: 1827265320}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: 0, y: 1, z: 7}
+  m_LocalPosition: {x: 0, y: 1, z: 0.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -844,10 +844,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ced7bf28cdbee104e8cdc34ab761b039, type: 3}
   m_Name: 
   m_EditorClassIdentifier: PurrNet.Runtime::PurrNet.PlayerSpawner
-  _playerPrefab: {fileID: 5154484800931780872, guid: 1f6329ff68c80dd46a8bb8e5db77130d, type: 3}
+  _playerPrefab: {fileID: 1982616122170284029, guid: 1747e5dcadf5f7241b743d6b382eb114, type: 3}
   _ignoreNetworkRules: 0
   spawnPoints:
-  - {fileID: 1827265321}
+  - {fileID: 0}
 --- !u!1 &2116198337
 GameObject:
   m_ObjectHideFlags: 0
@@ -1749,7 +1749,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 2147483647
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!23 &7499497021674395898
 MeshRenderer:
   m_ObjectHideFlags: 0
