@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.luca3317.tmpeffects": "https://github.com/Luca3317/TMPEffects.git?path=/Package",
     "com.unity.2d.sprite": "1.0.0",
     "com.unity.ai.navigation": "2.0.14",
     "com.unity.cinemachine": "3.1.7",
@@ -12,6 +13,7 @@
     "com.unity.test-framework": "1.8.0",
     "com.unity.ugui": "2.6.0",
     "com.unity.visualscripting": "1.9.12",
+    "dev.purrnet.purrnet": "https://github.com/PurrNet/PurrNet.git?path=/Assets/PurrNet#v1.23.0-beta.51",
     "dev.purrnet.services": "https://github.com/PurrNet/PurrServices.git?path=Assets/Tool#v1.1.2",
     "dev.purrnet.ui": "https://github.com/PurrNet/PurrUI.git?path=Assets/PurrUI#v1.6.0-beta.1",
     "com.unity.modules.accessibility": "1.0.0",
@@ -47,7 +49,6 @@
     "com.unity.modules.vehicles": "1.0.0",
     "com.unity.modules.video": "1.0.0",
     "com.unity.modules.wind": "1.0.0",
-    "com.unity.modules.xr": "1.0.0",
-    "dev.purrnet.purrnet": "https://github.com/PurrNet/PurrNet.git?path=/Assets/PurrNet#v1.23.0-beta.51"
+    "com.unity.modules.xr": "1.0.0"
   }
 }
