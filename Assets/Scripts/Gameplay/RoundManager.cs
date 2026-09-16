@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using PurrNet;
+using PurrNet.Lobby;
 using PurrNet.Modules;
 using UnityEngine;
 
@@ -51,6 +52,11 @@ public class RoundManager : NetworkBehaviour
     private readonly HashSet<PlayerID> _votedThisTurn = new HashSet<PlayerID>();
     private readonly Dictionary<PlayerID, int> _scores = new Dictionary<PlayerID, int>();
 
+    // Doubles as the server's resolved-name cache and each client's local
+    // display-name cache (populated via the RPCs below) - display names
+    // aren't secret, so one field serving both roles is fine.
+    private readonly Dictionary<PlayerID, string> _displayNames = new Dictionary<PlayerID, string>();
+
     // Local-only mirrors: only ever populated on the one client an RPC
     // actually targeted. UI binds to these events, never to another
     // player's data.
@@ -61,6 +67,13 @@ public class RoundManager : NetworkBehaviour
     public event Action<int, int> onLocalScoreChanged;
     public event Action<PlayerID, float> onVoteRevealed;
     public event Action<PlayerID, int> onFinalScoreRevealed;
+    public event Action<PlayerID, string> onDisplayNameChanged;
+
+    /// <summary>The player's PurrLobby display name if known yet, otherwise a fallback like "007".</summary>
+    public string GetDisplayName(PlayerID player)
+    {
+        return _displayNames.TryGetValue(player, out var name) ? name : player.ToString();
+    }
 
     public static bool TryGetLocalPlayerId(out PlayerID id)
     {
@@ -133,7 +146,67 @@ public class RoundManager : NetworkBehaviour
             _unpickedActivePlayers.Add(player);
         }
 
+        ResolveAndBroadcastDisplayName(player);
         TryBeginRoundIfReady();
+    }
+
+    /// <summary>
+    /// Server-only. Bridges PurrNet's low-level PlayerID to PurrLobby's
+    /// display name: PlayerID -> Connection (PlayersManager) -> lobby's own
+    /// string player-id (IProvideConnectionToPlayerID) -> IPlayer.displayName
+    /// (the active lobby). Same chain PurrLobbyPlayer.Setup already uses
+    /// internally - this just makes the result available to everyone in the
+    /// game scene instead of only the lobby-scene UI.
+    /// </summary>
+    private void ResolveAndBroadcastDisplayName(PlayerID player)
+    {
+        // Catch this (possibly late-joining) player up on every name already
+        // known - a plain ObserversRpc broadcast at resolve-time would never
+        // reach someone who joins after it fired.
+        foreach (var kvp in _displayNames)
+            Target_SetDisplayName(player, kvp.Key, kvp.Value);
+
+        if (_displayNames.ContainsKey(player))
+            return;
+
+        if (!TryResolveDisplayName(player, out var name))
+            return;
+
+        _displayNames[player] = name;
+        Rpc_SetDisplayName(player, name);
+    }
+
+    private bool TryResolveDisplayName(PlayerID player, out string displayName)
+    {
+        displayName = null;
+
+        if (!networkManager.TryGetModule<PlayersManager>(true, out var players) ||
+            !players.TryGetConnection(player, out var conn))
+            return false;
+
+        if (networkManager.authenticator is not IProvideConnectionToPlayerID provider ||
+            !provider.TryGetPlayerID(conn, out var lobbyPlayerId))
+            return false;
+
+        var lobby = GameOrchestrator.active != null ? GameOrchestrator.active.activeLobby : null;
+        if (lobby == null || !lobby.TryGetPlayer(lobbyPlayerId, out var lobbyPlayer))
+            return false;
+
+        displayName = lobbyPlayer.displayName;
+        return true;
+    }
+
+    [ObserversRpc]
+    private void Rpc_SetDisplayName(PlayerID player, string displayName) => ApplyDisplayName(player, displayName);
+
+    [TargetRpc]
+    private void Target_SetDisplayName(PlayerID target, PlayerID player, string displayName) =>
+        ApplyDisplayName(player, displayName);
+
+    private void ApplyDisplayName(PlayerID player, string displayName)
+    {
+        _displayNames[player] = displayName;
+        onDisplayNameChanged?.Invoke(player, displayName);
     }
 
     private void OnPlayerUnloadedScene(PlayerID player, SceneID scene, bool asServer)

@@ -35,6 +35,7 @@ public class HudController : MonoBehaviour
         _round.rightLabel.onChanged += OnRightLabelChanged;
         _round.activePlayerId.onChanged += OnActivePlayerChanged;
         _round.onLocalScoreChanged += OnLocalScoreChanged;
+        _round.onDisplayNameChanged += OnDisplayNameChanged;
 
         OnPhaseChanged(_round.phase.value);
         OnPromptChanged(_round.promptText.value);
@@ -54,6 +55,7 @@ public class HudController : MonoBehaviour
         _round.rightLabel.onChanged -= OnRightLabelChanged;
         _round.activePlayerId.onChanged -= OnActivePlayerChanged;
         _round.onLocalScoreChanged -= OnLocalScoreChanged;
+        _round.onDisplayNameChanged -= OnDisplayNameChanged;
         _round = null;
     }
 
@@ -83,7 +85,15 @@ public class HudController : MonoBehaviour
         if (!_activePlayerText)
             return;
 
-        _activePlayerText.text = player.HasValue ? $"Active player: {player.Value}" : "";
+        _activePlayerText.text = player.HasValue ? $"Active player: {_round.GetDisplayName(player.Value)}" : "";
+    }
+
+    private void OnDisplayNameChanged(PlayerID player, string displayName)
+    {
+        // The active player's name can resolve after we've already shown
+        // their (fallback-formatted) PlayerID - refresh once it arrives.
+        if (_round.activePlayerId.value == player)
+            OnActivePlayerChanged(_round.activePlayerId.value);
     }
 
     private void OnLocalScoreChanged(int delta, int newTotal)

@@ -71,7 +71,7 @@ public class RevealPanelController : MonoBehaviour
 
     private void OnVoteRevealed(PlayerID voter, float position)
     {
-        _voteLines.Add($"{voter}: {position:0.00}");
+        _voteLines.Add($"{_round.GetDisplayName(voter)}: {position:0.00}");
         if (_votesListText)
             _votesListText.text = string.Join("\n", _voteLines);
     }
