@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using PurrNet;
 using PurrNet.Lobby;
@@ -21,15 +22,36 @@ public class RoundManager : NetworkBehaviour
 {
     public static RoundManager instance { get; private set; }
 
-    [Header("Round Content (placeholder)")]
-    [SerializeField] private string _defaultPrompt = "Place a fifth grader within this scale of intelligence";
-    [SerializeField] private string _defaultLeftLabel = "Puppy";
-    [SerializeField] private string _defaultRightLabel = "Seventh grader";
+    [Header("Round Content")]
+    [Tooltip("Pool of possible rounds. Each game randomly picks Number Of Rounds of these (no repeats, unless there aren't enough).")]
+    [SerializeField] private RoundContent[] _rounds =
+    {
+        new RoundContent
+        {
+            prompt = "Place a fifth grader within this scale of intelligence",
+            leftLabel = "Puppy",
+            rightLabel = "Seventh grader"
+        }
+    };
+    [Tooltip("How many rounds a game plays before ending. Clamped down if there aren't enough Round Content entries to avoid repeats.")]
+    [SerializeField, Min(1)] private int _numberOfRounds = 3;
 
     [Header("Scoring (placeholder tuning - needs a real pass)")]
     [SerializeField] private int _maxPointsPerTurn = 100;
     [SerializeField] private float _minGoalWidth = 0.1f;
     [SerializeField] private float _maxGoalWidth = 0.2f;
+
+    [Header("Turn timers (seconds)")]
+    [Tooltip("How long the active player has to submit a new label before voting opens anyway, unchanged.")]
+    [SerializeField, Range(5f, 120f)] private float _targetingDuration = 30f;
+    [Tooltip("How long the audience has to vote before the server force-reveals with whatever votes it has.")]
+    [SerializeField, Range(5f, 180f)] private float _votingDuration = 45f;
+    [Tooltip("Extra time the server waits past votingDuration before force-revealing, so a client's own time-triggered auto-submit has a chance to arrive over the network first.")]
+    [SerializeField, Range(0f, 15f)] private float _votingTimeoutGraceSeconds = 3f;
+
+    /// <summary>Same duration the server enforces - UI countdowns should read this instead of hardcoding a copy.</summary>
+    public float targetingDuration => _targetingDuration;
+    public float votingDuration => _votingDuration;
 
     // Public, server-authoritative, synced to every observer by default -
     // safe to be public because none of this is secret.
@@ -43,6 +65,8 @@ public class RoundManager : NetworkBehaviour
     public SyncVar<float> pendulumValue = new SyncVar<float>(0.5f);
     public SyncVar<int> turnNumber = new SyncVar<int>(0);
     public SyncVar<int> totalPlayers = new SyncVar<int>(0);
+    public SyncVar<int> roundNumber = new SyncVar<int>(0);
+    public SyncVar<int> totalRounds = new SyncVar<int>(0);
 
     // Server-only. Never synced, never broadcast except through the
     // explicit RPCs below - this is what keeps everything else hidden.
@@ -57,6 +81,11 @@ public class RoundManager : NetworkBehaviour
     // aren't secret, so one field serving both roles is fine.
     private readonly Dictionary<PlayerID, string> _displayNames = new Dictionary<PlayerID, string>();
 
+    private Coroutine _phaseTimeoutRoutine;
+
+    private readonly List<RoundContent> _roundsToPlay = new List<RoundContent>();
+    private int _currentRoundIndex = -1;
+
     // Local-only mirrors: only ever populated on the one client an RPC
     // actually targeted. UI binds to these events, never to another
     // player's data.
@@ -68,6 +97,7 @@ public class RoundManager : NetworkBehaviour
     public event Action<PlayerID, float> onVoteRevealed;
     public event Action<PlayerID, int> onFinalScoreRevealed;
     public event Action<PlayerID, string> onDisplayNameChanged;
+    public event Action onVotingEnded;
 
     /// <summary>The player's PurrLobby display name if known yet, otherwise a fallback like "007".</summary>
     public string GetDisplayName(PlayerID player)
@@ -230,11 +260,58 @@ public class RoundManager : NetworkBehaviour
         BeginRound(players.players);
     }
 
+    /// <summary>Called once, when the game first has enough players. Sets up the whole game's round pool, then starts round 1.</summary>
     private void BeginRound(IReadOnlyList<PlayerID> roster)
     {
-        promptText.value = _defaultPrompt;
-        leftLabel.value = _defaultLeftLabel;
-        rightLabel.value = _defaultRightLabel;
+        foreach (var p in roster)
+        {
+            if (!_scores.ContainsKey(p))
+                _scores[p] = 0;
+        }
+
+        PrepareRoundsToPlay();
+        _currentRoundIndex = -1;
+
+        StartNextRound(roster);
+    }
+
+    /// <summary>Randomly picks (without repeats, where possible) which authored Round Content entries this game will play, in order.</summary>
+    private void PrepareRoundsToPlay()
+    {
+        _roundsToPlay.Clear();
+
+        if (_rounds == null || _rounds.Length == 0)
+        {
+            Debug.LogError("RoundManager has no Round Content configured.", this);
+            return;
+        }
+
+        var pool = new List<RoundContent>(_rounds);
+        Shuffle(pool);
+
+        int count = Mathf.Min(_numberOfRounds, pool.Count);
+        if (_numberOfRounds > pool.Count)
+        {
+            Debug.LogWarning($"RoundManager: requested {_numberOfRounds} rounds but only {pool.Count} " +
+                              "Round Content entries are configured - playing all of them once instead.", this);
+        }
+
+        for (int i = 0; i < count; i++)
+            _roundsToPlay.Add(pool[i]);
+
+        totalRounds.value = _roundsToPlay.Count;
+    }
+
+    /// <summary>Applies the next authored round's content and resets the active-player pool for it.</summary>
+    private void StartNextRound(IReadOnlyList<PlayerID> roster)
+    {
+        _currentRoundIndex++;
+        roundNumber.value = _currentRoundIndex + 1; // 1-based for display
+
+        var content = _roundsToPlay[_currentRoundIndex];
+        promptText.value = content.prompt;
+        leftLabel.value = content.leftLabel;
+        rightLabel.value = content.rightLabel;
 
         _unpickedActivePlayers.Clear();
         _unpickedActivePlayers.AddRange(roster);
@@ -242,12 +319,6 @@ public class RoundManager : NetworkBehaviour
 
         totalPlayers.value = roster.Count;
         turnNumber.value = 0;
-
-        foreach (var p in roster)
-        {
-            if (!_scores.ContainsKey(p))
-                _scores[p] = 0;
-        }
 
         phase.value = RoundPhase.RoundIntro;
         BeginTargeting();
@@ -257,6 +328,13 @@ public class RoundManager : NetworkBehaviour
     {
         if (_unpickedActivePlayers.Count == 0)
         {
+            bool hasMoreRounds = _currentRoundIndex + 1 < _roundsToPlay.Count;
+            if (hasMoreRounds && networkManager.TryGetModule<PlayersManager>(true, out var players))
+            {
+                StartNextRound(players.players);
+                return;
+            }
+
             EndGame();
             return;
         }
@@ -274,6 +352,17 @@ public class RoundManager : NetworkBehaviour
         phase.value = RoundPhase.Targeting;
 
         Target_ReceiveSecretGoal(next, _currentGoalRange.Value.min, _currentGoalRange.Value.max);
+
+        StartPhaseTimeout(_targetingDuration, OnTargetingTimeout);
+    }
+
+    /// <summary>The active player ran out of time - proceed to voting with whatever the labels already were, unchanged.</summary>
+    private void OnTargetingTimeout()
+    {
+        if (phase.value != RoundPhase.Targeting)
+            return;
+
+        OpenVoting();
     }
 
     [TargetRpc]
@@ -327,6 +416,8 @@ public class RoundManager : NetworkBehaviour
 
     private void OpenVoting()
     {
+        CancelPhaseTimeout();
+
         _pendingVotes.Clear();
         _votedThisTurn.Clear();
         votesSubmittedCount.value = 0;
@@ -341,7 +432,30 @@ public class RoundManager : NetworkBehaviour
         phase.value = RoundPhase.VotingOpen;
 
         if (votesExpectedCount.value <= 0)
+        {
             Reveal();
+            return;
+        }
+
+        // Client-side auto-submit (using each straggler's own current slider
+        // value) is expected to land first - this is only a backstop for a
+        // client that never responds at all (disconnect, etc.), so it waits
+        // a bit longer than the duration UI countdowns show.
+        StartPhaseTimeout(_votingDuration + _votingTimeoutGraceSeconds, OnVotingTimeout);
+    }
+
+    /// <summary>
+    /// Backstop only - reveals with whatever votes actually arrived. Clients
+    /// are expected to auto-submit their own current slider value the moment
+    /// their local countdown hits zero, so this should rarely fire with
+    /// anyone still missing.
+    /// </summary>
+    private void OnVotingTimeout()
+    {
+        if (phase.value != RoundPhase.VotingOpen)
+            return;
+
+        Reveal();
     }
 
     [ServerRpc(requireOwnership: false)]
@@ -365,7 +479,16 @@ public class RoundManager : NetworkBehaviour
 
     private void Reveal()
     {
+        CancelPhaseTimeout();
         phase.value = RoundPhase.Revealing;
+
+        // Explicit broadcast rather than relying on the phase SyncVar itself:
+        // Revealing/Scoring/TurnComplete all happen synchronously in this
+        // same call stack, so a client could observe phase jump straight
+        // from VotingOpen to the next Targeting without ever seeing the
+        // intermediate values - this RPC is still delivered as its own
+        // discrete message regardless.
+        Rpc_VotingEnded();
 
         float sum = 0f;
         foreach (var kvp in _pendingVotes)
@@ -385,18 +508,29 @@ public class RoundManager : NetworkBehaviour
         onVoteRevealed?.Invoke(voterId, position);
     }
 
+    [ObserversRpc]
+    private void Rpc_VotingEnded() => onVotingEnded?.Invoke();
+
     private void ScoreTurn()
     {
         phase.value = RoundPhase.Scoring;
 
-        // Only the active player scores, based on how close the pendulum's
-        // final position landed to their secret goal range. Audience members
-        // don't earn points for voting.
+        // Active player scores based on how close the pendulum's final
+        // position landed to their secret goal range. Each audience member
+        // separately scores based on how close their own vote landed to
+        // that same (still-secret) goal range.
         if (_currentGoalRange.HasValue && activePlayerId.value.HasValue)
         {
             var (min, max) = _currentGoalRange.Value;
+
             int activeDelta = ScoreFromDistance(DistanceToRange(pendulumValue.value, min, max));
             ApplyScore(activePlayerId.value.Value, activeDelta);
+
+            foreach (var kvp in _pendingVotes)
+            {
+                int audienceDelta = ScoreFromDistance(DistanceToRange(kvp.Value, min, max));
+                ApplyScore(kvp.Key, audienceDelta);
+            }
         }
 
         _currentGoalRange = null;
@@ -448,7 +582,29 @@ public class RoundManager : NetworkBehaviour
         return Mathf.RoundToInt(t * _maxPointsPerTurn);
     }
 
-    private static void Shuffle(IList<PlayerID> list)
+    private void StartPhaseTimeout(float duration, Action onTimeout)
+    {
+        CancelPhaseTimeout();
+        _phaseTimeoutRoutine = StartCoroutine(PhaseTimeoutRoutine(duration, onTimeout));
+    }
+
+    private void CancelPhaseTimeout()
+    {
+        if (_phaseTimeoutRoutine == null)
+            return;
+
+        StopCoroutine(_phaseTimeoutRoutine);
+        _phaseTimeoutRoutine = null;
+    }
+
+    private IEnumerator PhaseTimeoutRoutine(float duration, Action onTimeout)
+    {
+        yield return new WaitForSeconds(duration);
+        _phaseTimeoutRoutine = null;
+        onTimeout?.Invoke();
+    }
+
+    private static void Shuffle<T>(IList<T> list)
     {
         for (int i = list.Count - 1; i > 0; i--)
         {

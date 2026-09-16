@@ -7,6 +7,10 @@ using UnityEngine.UI;
 /// slider value is a purely local echo until Submit is pressed - nothing
 /// about it is sent or synced before that, so nobody else ever sees it
 /// mid-drag, and other clients never see it at all before the reveal.
+///
+/// If this player's own countdown runs out first, this auto-submits
+/// wherever the slider currently sits - the server has no way to do this
+/// itself, since it never knows an unsent slider value.
 /// </summary>
 public class VotingPanelController : MonoBehaviour
 {
@@ -16,13 +20,35 @@ public class VotingPanelController : MonoBehaviour
     [SerializeField] private TMP_Text _progressText;
     [SerializeField] private TMP_Text _yourPositionText;
 
+    [Header("Timer")]
+    [SerializeField] private TMP_Text _timerText;
+
     private RoundManager _round;
     private bool _hasVotedThisTurn;
+    private float _countdown;
+    private bool _timerRunning;
 
     private void Update()
     {
         if (_round == null)
+        {
             TryBind();
+            return;
+        }
+
+        if (_timerRunning)
+        {
+            _countdown -= Time.deltaTime;
+
+            if (_timerText)
+                _timerText.text = $"{Mathf.CeilToInt(Mathf.Max(0f, _countdown))}s";
+
+            if (_countdown <= 0f)
+            {
+                _timerRunning = false;
+                OnSubmit(); // auto-submit wherever the slider currently sits
+            }
+        }
     }
 
     private void TryBind()
@@ -59,6 +85,16 @@ public class VotingPanelController : MonoBehaviour
         if (phase == RoundPhase.Targeting)
             _hasVotedThisTurn = false;
 
+        if (phase == RoundPhase.VotingOpen && !IsActivePlayer())
+        {
+            _countdown = _round.votingDuration;
+            _timerRunning = true;
+        }
+        else
+        {
+            _timerRunning = false;
+        }
+
         Refresh();
     }
 
@@ -76,9 +112,17 @@ public class VotingPanelController : MonoBehaviour
         if (_round == null || _hasVotedThisTurn)
             return;
 
+        _timerRunning = false;
         _hasVotedThisTurn = true;
         _round.Rpc_SubmitVote(_slider ? _slider.value : 0.5f);
         Refresh();
+    }
+
+    private bool IsActivePlayer()
+    {
+        return _round.activePlayerId.value.HasValue &&
+               RoundManager.TryGetLocalPlayerId(out var localId) &&
+               _round.activePlayerId.value.Value == localId;
     }
 
     private void Refresh()
@@ -86,11 +130,7 @@ public class VotingPanelController : MonoBehaviour
         if (_round == null || !_panelRoot)
             return;
 
-        bool isActivePlayer = _round.activePlayerId.value.HasValue &&
-                              RoundManager.TryGetLocalPlayerId(out var localId) &&
-                              _round.activePlayerId.value.Value == localId;
-
-        bool show = _round.phase.value == RoundPhase.VotingOpen && !isActivePlayer && !_hasVotedThisTurn;
+        bool show = _round.phase.value == RoundPhase.VotingOpen && !IsActivePlayer() && !_hasVotedThisTurn;
         _panelRoot.SetActive(show);
 
         UpdateProgressText();
