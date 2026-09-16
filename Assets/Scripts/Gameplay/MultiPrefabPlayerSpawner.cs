@@ -7,18 +7,8 @@ using UnityEngine.SceneManagement;
 namespace PurrNet
 {
     /// <summary>
-    /// Drop-in replacement for PurrNet's own PlayerSpawner that rotates
-    /// through a list of prefabs instead of always spawning the same one -
-    /// use this when you have several visually-different but functionally
-    /// identical player prefabs (e.g. different character skins) and want
-    /// each newly-connecting player to get the next one in the list,
-    /// looping back to the start once it runs out.
-    ///
-    /// Not a modification of PlayerSpawner.cs itself - that file lives in
-    /// Library/PackageCache and is pulled from PurrNet's own git repo, so
-    /// edits there would be silently lost on the next package resolve.
-    /// This is a full drop-in replacement built on the same public
-    /// PurrMonoBehaviour base class PlayerSpawner itself uses.
+    ///  replacement for PurrNet's own PlayerSpawner that rotates
+    /// through a list of prefabs instead of always spawning the same one 
     /// </summary>
     [AddComponentMenu("PurrNet/Multi-Prefab Player Spawner")]
     public class MultiPrefabPlayerSpawner : PurrMonoBehaviour

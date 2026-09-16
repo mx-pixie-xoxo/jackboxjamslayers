@@ -1,11 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Reflects RoundManager.pendulumValue, animating smoothly to each new
-/// value over its own independently-tunable duration - deliberately not
-/// synced to RoundManager's PendulumMoving phase duration; the two are
-/// tuned separately by design and only need to roughly match if you want
-/// the visual to finish around when the server moves on to scoring.
+/// Reflects the RoundManager.pendulumValue, striaght up lerping it. 
 /// </summary>
 public class PendulumVisual : MonoBehaviour
 {

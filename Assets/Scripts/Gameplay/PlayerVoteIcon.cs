@@ -1,22 +1,19 @@
+using System.Collections.Generic;
 using PurrNet;
 using TMPro;
 using UnityEngine;
 
 /// <summary>
-/// Slides this player's own screen-space icon to their revealed vote
-/// position once voting closes, flips it to face the direction it's
-/// currently sliding, and keeps a name label showing whose icon it is.
-/// RoundManager's reveal/display-name events are public and identical on
-/// every client - this just ignores them unless they're about the player
-/// this particular spawned instance belongs to.
-///
-/// Lives on the Player.prefab root, alongside its NetworkIdentity. Not
-/// itself networked - everything here only ever reacts to data every
-/// client already legitimately received, so no new networking is needed.
+// used to have the player character move in tandem with thier vote
+/// Must like on the Player.prefab root
 /// </summary>
 [RequireComponent(typeof(NetworkIdentity))]
 public class PlayerVoteIcon : MonoBehaviour
 {
+    private static readonly Dictionary<PlayerID, PlayerVoteIcon> ByOwner = new Dictionary<PlayerID, PlayerVoteIcon>();
+
+    public static bool TryGetByOwner(PlayerID owner, out PlayerVoteIcon icon) => ByOwner.TryGetValue(owner, out icon);
+
     [SerializeField] private RectTransform _icon;
     [Tooltip("Child of _icon holding the actual visual sprite - only this gets flipped, so siblings like the name label don't mirror with it.")]
     [SerializeField] private RectTransform _sprite;
@@ -36,10 +33,14 @@ public class PlayerVoteIcon : MonoBehaviour
 
     private static readonly int IsMovingHash = Animator.StringToHash("IsMoving");
 
+    /// <summary>The RectTransform PodiumController repositions at game end</summary>
+    public RectTransform icon => _icon;
+
     private NetworkIdentity _identity;
     private RoundManager _round;
     private float _targetX = 0.5f;
-    private bool _nameApplied;
+    private bool _ownerResolved;
+    private bool _gameOver;
 
     private void Awake()
     {
@@ -54,10 +55,12 @@ public class PlayerVoteIcon : MonoBehaviour
             return;
         }
 
-        if (!_nameApplied && _identity.owner.HasValue)
-            RefreshName();
+        if (!_ownerResolved && _identity.owner.HasValue)
+            ResolveOwner();
 
-        if (!_icon)
+        // Once the game is over( ronds are done), PodiumController takes over positioning
+        // the top 3 icons directly
+        if (_gameOver || !_icon)
             return;
 
         float currentX = _icon.anchorMin.x;
@@ -91,6 +94,12 @@ public class PlayerVoteIcon : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (_ownerResolved && _identity.owner.HasValue &&
+            ByOwner.TryGetValue(_identity.owner.Value, out var existing) && existing == this)
+        {
+            ByOwner.Remove(_identity.owner.Value);
+        }
+
         if (_round == null)
             return;
 
@@ -114,23 +123,21 @@ public class PlayerVoteIcon : MonoBehaviour
             _nameText.text = displayName;
     }
 
-    private void RefreshName()
+    private void ResolveOwner()
     {
         if (!_identity.owner.HasValue)
             return;
 
+        _ownerResolved = true;
+        ByOwner[_identity.owner.Value] = this;
+
         if (_nameText)
             _nameText.text = _round.GetDisplayName(_identity.owner.Value);
-
-        _nameApplied = true;
     }
 
     private void OnLocalScoreChanged(int delta, int newTotal)
     {
-        // onLocalScoreChanged only ever fires about MY OWN score, but every
-        // player's PlayerVoteIcon instance on my screen shares this same
-        // event - only the one that's actually mine should react, or my
-        // score would flash over everyone else's icon too.
+        //just changes the score of YOur players score, not anyone elses
         if (!_identity.isOwner || !_scoreDeltaText)
             return;
 
@@ -140,9 +147,11 @@ public class PlayerVoteIcon : MonoBehaviour
 
     private void OnPhaseChanged(RoundPhase phase)
     {
-        // Hide again once a fresh turn begins - put your DOTween trigger on
-        // this same GameObject reacting to OnEnable/OnDisable.
+        // Hide again once a fresh turn begins.
+    
         if (phase == RoundPhase.Targeting && _scoreDeltaText)
             _scoreDeltaText.gameObject.SetActive(false);
+
+        _gameOver = phase == RoundPhase.GameOver;
     }
 }

@@ -2,13 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// Background music and one-shot audio cues, all driven off RoundManager's
-/// existing phase/event signals. Purely local presentation, not networked -
-/// every client runs its own copy and reacts only to data it already
-/// legitimately has. The "your turn" cue is private to the active player
-/// for the same reason the rest of that UI is: it's driven by
-/// onLocalGoalReceived, which only ever fires on the one client the secret
-/// goal was actually sent to - this script does no privacy filtering of
-/// its own.
+/// existing phase/event signals. 
 /// </summary>
 public class GameAudioController : MonoBehaviour
 {
@@ -82,10 +76,7 @@ public class GameAudioController : MonoBehaviour
 
     private void OnPhaseChanged(RoundPhase phase)
     {
-        // Any per-player "waiting" cue from whatever phase we just left
-        // should never bleed into the next one - e.g. "your turn" cut off
-        // the instant Targeting ends, "voting warning" cut off the instant
-        // voting closes, regardless of how far into the clip it was.
+       
         StopInterruptibleSfx();
 
         switch (phase)
@@ -111,15 +102,7 @@ public class GameAudioController : MonoBehaviour
 
     private void OnLocalGoalReceived(float min, float max)
     {
-        // This can fire more than once per turn (the targeting panel
-        // defensively re-requests it) - de-dupe on the goal range itself
-        // rather than RoundManager.turnNumber. That SyncVar and this RPC
-        // are delivered independently, and on a real (non-loopback)
-        // connection can apply out of order relative to each other, which
-        // let a duplicate slip through when comparing against turnNumber.
-        // The push and the defensive re-request always carry the identical
-        // (min, max) for a given turn, so comparing the payload itself
-        // isn't vulnerable to that ordering hazard.
+        
         bool isDuplicate = !float.IsNaN(_lastYourTurnGoalMin) &&
                            Mathf.Approximately(_lastYourTurnGoalMin, min) &&
                            Mathf.Approximately(_lastYourTurnGoalMax, max);
@@ -164,7 +147,7 @@ public class GameAudioController : MonoBehaviour
             _sfxSource.PlayOneShot(clip);
     }
 
-    /// <summary>Plays on a dedicated source (not PlayOneShot) specifically so StopInterruptibleSfx can cut it off later.</summary>
+    /// <summary>Plays on a dedicated source (not PlayOneShot) specifically so StopInterruptibleSfx can cut it off later(?).</summary>
     private void PlayInterruptibleSfx(AudioClip clip)
     {
         if (!_interruptibleSfxSource || !clip)

@@ -2,15 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// One shared camera + RenderTexture captures every player's character
-/// sprite in a single pass, each parked at its own fixed staging slot in
-/// the world. Individual players crop out just their own portion of that
-/// shared texture via RawImage.uvRect - see PlayerIconCapture.
-///
-/// Lives once in MainGame.unity. Set up the capture camera separately in
-/// the Editor: Culling Mask = the dedicated layer all character sprites
-/// live on, Clear Flags = Solid Color with alpha 0, Target Texture =
-/// sharedTexture below, framed so all slots fit in view in a row.
+/// depreciated for now
 /// </summary>
 public class PlayerIconStage : MonoBehaviour
 {

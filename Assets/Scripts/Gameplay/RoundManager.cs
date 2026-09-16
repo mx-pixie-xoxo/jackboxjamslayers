@@ -9,18 +9,13 @@ using UnityEngine;
 /// <summary>
 /// Server-authoritative referee for a full game: rotates the active player,
 /// hands out the secret goal range, collects votes, reveals results, and
-/// scores each turn. Lives as a scene object in MainGame.unity (PurrNet
-/// auto-spawns NetworkBehaviours already placed in a scene - no prefab or
-/// runtime Instantiate needed).
+/// scores each turn.
 ///
 /// Hidden information (the active player's secret goal, each vote before
-/// reveal, everyone's score) never becomes a SyncVar - it lives only in
-/// plain server-only fields below and is pushed to the right client via
-/// TargetRpc. That's the entire privacy mechanism; nothing else is needed.
+/// reveal, everyone's score) 
 ///
 /// The turn loop is a chain of coroutines, each pausing at a named phase for
-/// a configurable duration before advancing - this gives UI/animation/audio
-/// a guaranteed window per phase instead of everything happening instantly.
+/// a configurable duration before advancing
 /// </summary>
 public class RoundManager : NetworkBehaviour
 {
@@ -69,12 +64,12 @@ public class RoundManager : NetworkBehaviour
     [Tooltip("After points are awarded, before the next active player is chosen.")]
     [SerializeField, Range(0f, 10f)] private float _turnCompleteDuration = 1f;
 
-    /// <summary>Same duration the server enforces - UI countdowns should read this instead of hardcoding a copy.</summary>
+  
     public float targetingDuration => _targetingDuration;
     public float votingDuration => _votingDuration;
 
-    // Public, server-authoritative, synced to every observer by default -
-    // safe to be public because none of this is secret.
+    // Public, server-authoritative, synced to every player
+    // safe to be public because all of this is seen by the players
     public SyncVar<RoundPhase> phase = new SyncVar<RoundPhase>(RoundPhase.WaitingForPlayers);
     public SyncVar<string> promptText = new SyncVar<string>("");
     public SyncVar<string> leftLabel = new SyncVar<string>("");
@@ -88,18 +83,16 @@ public class RoundManager : NetworkBehaviour
     public SyncVar<int> roundNumber = new SyncVar<int>(0);
     public SyncVar<int> totalRounds = new SyncVar<int>(0);
 
-    // Server-only. Never synced, never broadcast except through the
-    // explicit RPCs below - this is what keeps everything else hidden.
-    private readonly List<PlayerID> _unpickedActivePlayers = new List<PlayerID>();
+    // Server-only. 
+
+        private readonly List<PlayerID> _unpickedActivePlayers = new List<PlayerID>();
     private (float min, float max)? _currentGoalRange;
     private readonly Dictionary<PlayerID, float> _pendingVotes = new Dictionary<PlayerID, float>();
     private readonly HashSet<PlayerID> _votedThisTurn = new HashSet<PlayerID>();
     private readonly Dictionary<PlayerID, int> _scores = new Dictionary<PlayerID, int>();
     private float _pendingPendulumValue;
 
-    // Doubles as the server's resolved-name cache and each client's local
-    // display-name cache (populated via the RPCs below) - display names
-    // aren't secret, so one field serving both roles is fine.
+    
     private readonly Dictionary<PlayerID, string> _displayNames = new Dictionary<PlayerID, string>();
 
     private Coroutine _phaseTimeoutRoutine;
@@ -108,9 +101,7 @@ public class RoundManager : NetworkBehaviour
     private readonly List<RoundContent> _roundsToPlay = new List<RoundContent>();
     private int _currentRoundIndex = -1;
 
-    // Local-only mirrors: only ever populated on the one client an RPC
-    // actually targeted. UI binds to these events, never to another
-    // player's data.
+    
     public (float min, float max)? localSecretGoal { get; private set; }
     public int localScore { get; private set; }
 
@@ -122,7 +113,7 @@ public class RoundManager : NetworkBehaviour
     public event Action<PlayerID, string> onDisplayNameChanged;
     public event Action onVotingEnded;
 
-    /// <summary>The player's PurrLobby display name if known yet, otherwise a fallback like "007".</summary>
+    /// <summary>The player's PurrLobby display name if it is found, otherwise a fallback like "001-002-ect".</summary>
     public string GetDisplayName(PlayerID player)
     {
         return _displayNames.TryGetValue(player, out var name) ? name : player.ToString();
@@ -130,11 +121,7 @@ public class RoundManager : NetworkBehaviour
 
     public static bool TryGetLocalPlayerId(out PlayerID id)
     {
-        // NetworkManager.playerModule prefers the server's PlayersManager
-        // whenever one exists, which is always null on a listen-server host
-        // (the server's own module never receives a login response - only
-        // its client-role module does). Ask for the client-role module
-        // explicitly so this also resolves correctly for the host.
+
         var nm = NetworkManager.main;
         if (nm != null && nm.TryGetModule<PlayersManager>(false, out var clientPlayers) &&
             clientPlayers.localPlayerId.HasValue)
@@ -165,12 +152,7 @@ public class RoundManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Client-only. Reports this client's own PurrLobby display name to the
-    /// server. This is the client's own known identity (from the lobby it
-    /// came from), not something the server needs to reverse-engineer -
-    /// deliberately not using a Connection -> lobby-id bridge here, since
-    /// the game session's NetworkManager has no authenticator of its own
-    /// (that only exists on the separate lobby-session NetworkManager).
+    /// Client-only
     /// </summary>
     private void ReportLocalDisplayName()
     {
@@ -209,9 +191,7 @@ public class RoundManager : NetworkBehaviour
         if (!_scores.ContainsKey(player))
             _scores[player] = 0;
 
-        // A player who finishes loading after the round already started still
-        // needs a turn later, and still needs to count as audience - without
-        // this they'd be silently skipped forever.
+    
         if (phase.value != RoundPhase.WaitingForPlayers &&
             activePlayerId.value != player &&
             !_unpickedActivePlayers.Contains(player))
@@ -222,20 +202,14 @@ public class RoundManager : NetworkBehaviour
         TryBeginRoundIfReady();
     }
 
-    /// <summary>
-    /// Server-only. The client reports its own display name (it always
-    /// knows this, regardless of which auth/session setup got it into this
-    /// game); the server just records and relays it.
-    /// </summary>
+   
     [ServerRpc(requireOwnership: false)]
     private void Rpc_ReportMyDisplayName(string displayName, RPCInfo info = default)
     {
         if (string.IsNullOrWhiteSpace(displayName))
             return;
 
-        // Catch this (possibly late-joining) player up on every name already
-        // known - a plain broadcast at report-time would never reach someone
-        // who joins after an earlier player's report already went out.
+        
         foreach (var kvp in _displayNames)
             Target_SetDisplayName(info.sender, kvp.Key, kvp.Value);
 
@@ -295,7 +269,7 @@ public class RoundManager : NetworkBehaviour
         BeginRoundIntroSequence(roster);
     }
 
-    /// <summary>Randomly picks (without repeats, where possible) which authored Round Content entries this game will play, in order.</summary>
+    /// <summary>Randomly picks (without repeats, where possible) which a Round Content entries this game will play, in order.</summary>
     private void PrepareRoundsToPlay()
     {
         _roundsToPlay.Clear();
@@ -382,7 +356,7 @@ public class RoundManager : NetworkBehaviour
         StartPhaseTimeout(_targetingDuration, OnTargetingTimeout);
     }
 
-    /// <summary>The active player ran out of time - proceed with whatever the labels already were, unchanged.</summary>
+    /// <summary>The active player ran out of time, so proceed with whatever the labels already were</summary>
     private void OnTargetingTimeout()
     {
         if (phase.value != RoundPhase.Targeting)
@@ -398,13 +372,7 @@ public class RoundManager : NetworkBehaviour
         onLocalGoalReceived?.Invoke(goalMin, goalMax);
     }
 
-    /// <summary>
-    /// Lets the active player's own UI explicitly pull its secret goal
-    /// instead of only relying on the one-shot push from BeginTargeting -
-    /// that push can race a client whose own scene load/UI subscription is
-    /// still settling (most likely right at game start). Safe to call any
-    /// number of times; only re-sends to whoever actually is active.
-    /// </summary>
+    
     [ServerRpc(requireOwnership: false)]
     public void Rpc_RequestSecretGoal(RPCInfo info = default)
     {
@@ -459,8 +427,8 @@ public class RoundManager : NetworkBehaviour
         _votedThisTurn.Clear();
         votesSubmittedCount.value = 0;
 
-        // Recompute from the live roster rather than trusting the snapshot
-        // taken at round start - a straggler who joined a moment late must
+       
+        // a straggler who joined a moment late must
         // still be counted as part of the audience.
         if (networkManager.TryGetModule<PlayersManager>(true, out var players))
             totalPlayers.value = players.players.Count;
@@ -474,19 +442,11 @@ public class RoundManager : NetworkBehaviour
             return;
         }
 
-        // Client-side auto-submit (using each straggler's own current slider
-        // value) is expected to land first - this is only a backstop for a
-        // client that never responds at all (disconnect, etc.), so it waits
-        // a bit longer than the duration UI countdowns show.
+        
         StartPhaseTimeout(_votingDuration + _votingTimeoutGraceSeconds, OnVotingTimeout);
     }
 
-    /// <summary>
-    /// Backstop only - proceeds with whatever votes actually arrived. Clients
-    /// are expected to auto-submit their own current slider value the moment
-    /// their local countdown hits zero, so this should rarely fire with
-    /// anyone still missing.
-    /// </summary>
+   
     private void OnVotingTimeout()
     {
         if (phase.value != RoundPhase.VotingOpen)
@@ -519,10 +479,7 @@ public class RoundManager : NetworkBehaviour
         CancelPhaseTimeout();
         phase.value = RoundPhase.VotingComplete;
 
-        // Explicit broadcast rather than relying on clients observing this
-        // phase value itself - fine either way here since VotingComplete is
-        // a real, held phase (not a synchronous pass-through), but kept as
-        // its own event since audio code already expects it.
+        
         Rpc_VotingEnded();
 
         RunPhaseSequence(VotingCompleteRoutine());
@@ -548,9 +505,7 @@ public class RoundManager : NetworkBehaviour
             Rpc_RevealOneVote(kvp.Key, kvp.Value);
         }
 
-        // Not applied to the pendulumValue SyncVar yet - that happens at
-        // BeginPendulumMoving, once the cue has played, so the visual swing
-        // starts exactly when it's supposed to.
+        // Not applied to the pendulumValue SyncVar yet
         _pendingPendulumValue = _pendingVotes.Count > 0 ? sum / _pendingVotes.Count : 0.5f;
 
         RunPhaseSequence(RevealMovingRoutine());
@@ -600,7 +555,7 @@ public class RoundManager : NetworkBehaviour
         // Active player scores based on how close the pendulum's final
         // position landed to their secret goal range. Each audience member
         // separately scores based on how close their own vote landed to
-        // that same (still-secret) goal range.
+        // that same goal range.
         if (_currentGoalRange.HasValue && activePlayerId.value.HasValue)
         {
             var (min, max) = _currentGoalRange.Value;
@@ -657,7 +612,7 @@ public class RoundManager : NetworkBehaviour
         onFinalScoreRevealed?.Invoke(playerId, finalScore);
     }
 
-    /// <summary>Ranks everyone by final score, descending, and tells every client who's 1st/2nd/3rd (null if fewer than that many players).</summary>
+    /// <summary>Ranks everyone by final score, descending, and tells who's 1st/2nd/3rd (null if fewer than that many players).</summary>
     private void BroadcastPodium()
     {
         var ranked = new List<PlayerID>(_scores.Keys);
