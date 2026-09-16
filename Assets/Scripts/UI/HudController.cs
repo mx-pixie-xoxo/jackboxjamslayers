@@ -113,6 +113,6 @@ public class HudController : MonoBehaviour
     private void OnLocalScoreChanged(int delta, int newTotal)
     {
         if (_yourScoreText)
-            _yourScoreText.text = $"Your score: {newTotal} ({(delta >= 0 ? "+" : "")}{delta})";
+            _yourScoreText.text = $"Your score: {newTotal}";
     }
 }

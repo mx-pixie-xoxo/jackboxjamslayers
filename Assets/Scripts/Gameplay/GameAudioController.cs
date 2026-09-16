@@ -17,17 +17,20 @@ public class GameAudioController : MonoBehaviour
     [SerializeField] private AudioClip _targetingMusic;
     [SerializeField] private AudioClip _votingMusic;
 
-    [Header("One-shot cues")]
+    [Header("One-shot cues (momentary events, everyone, never interrupted)")]
     [SerializeField] private AudioSource _sfxSource;
-    [Tooltip("Plays only for the active player, the moment it becomes their turn to input a word.")]
-    [SerializeField] private AudioClip _yourTurnClip;
-    [Tooltip("Plays only for audience members (not the active player), a set number of seconds before voting closes.")]
-    [SerializeField] private AudioClip _votingWarningClip;
-    [SerializeField] private float _votingWarningSecondsBeforeEnd = 10f;
     [Tooltip("Plays for everyone the moment voting closes (whether by everyone submitting or by timeout).")]
     [SerializeField] private AudioClip _votingEndedClip;
     [Tooltip("Plays for everyone right before the pendulum starts moving.")]
     [SerializeField] private AudioClip _pendulumCueClip;
+
+    [Header("Interruptible per-player cues (represent a waiting state - cut off the instant that state ends, even if the clip hasn't finished)")]
+    [SerializeField] private AudioSource _interruptibleSfxSource;
+    [Tooltip("Plays only for the active player, the moment it becomes their turn to input a word. Cut off the instant their turn ends.")]
+    [SerializeField] private AudioClip _yourTurnClip;
+    [Tooltip("Plays only for audience members (not the active player), a set number of seconds before voting closes. Cut off the instant voting closes.")]
+    [SerializeField] private AudioClip _votingWarningClip;
+    [SerializeField] private float _votingWarningSecondsBeforeEnd = 10f;
 
     private RoundManager _round;
     private bool _votingWarningPlayedThisTurn;
@@ -52,7 +55,7 @@ public class GameAudioController : MonoBehaviour
         if (!_votingWarningPlayedThisTurn && _votingCountdown <= _votingWarningSecondsBeforeEnd)
         {
             _votingWarningPlayedThisTurn = true;
-            PlaySfx(_votingWarningClip);
+            PlayInterruptibleSfx(_votingWarningClip);
         }
     }
 
@@ -79,6 +82,12 @@ public class GameAudioController : MonoBehaviour
 
     private void OnPhaseChanged(RoundPhase phase)
     {
+        // Any per-player "waiting" cue from whatever phase we just left
+        // should never bleed into the next one - e.g. "your turn" cut off
+        // the instant Targeting ends, "voting warning" cut off the instant
+        // voting closes, regardless of how far into the clip it was.
+        StopInterruptibleSfx();
+
         switch (phase)
         {
             case RoundPhase.Targeting:
@@ -120,7 +129,7 @@ public class GameAudioController : MonoBehaviour
 
         _lastYourTurnGoalMin = min;
         _lastYourTurnGoalMax = max;
-        PlaySfx(_yourTurnClip);
+        PlayInterruptibleSfx(_yourTurnClip);
     }
 
     private void OnVotingEnded()
@@ -153,5 +162,21 @@ public class GameAudioController : MonoBehaviour
     {
         if (_sfxSource && clip)
             _sfxSource.PlayOneShot(clip);
+    }
+
+    /// <summary>Plays on a dedicated source (not PlayOneShot) specifically so StopInterruptibleSfx can cut it off later.</summary>
+    private void PlayInterruptibleSfx(AudioClip clip)
+    {
+        if (!_interruptibleSfxSource || !clip)
+            return;
+
+        _interruptibleSfxSource.clip = clip;
+        _interruptibleSfxSource.Play();
+    }
+
+    private void StopInterruptibleSfx()
+    {
+        if (_interruptibleSfxSource && _interruptibleSfxSource.isPlaying)
+            _interruptibleSfxSource.Stop();
     }
 }

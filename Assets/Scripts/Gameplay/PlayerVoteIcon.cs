@@ -28,6 +28,9 @@ public class PlayerVoteIcon : MonoBehaviour
     [Header("Name label - parent it under the icon so it moves along with it")]
     [SerializeField] private TMP_Text _nameText;
 
+    [Header("Score delta - owner-only (everyone else's copy of this prefab never shows it), enabled/disabled for your own DOTween animation to react to")]
+    [SerializeField] private TMP_Text _scoreDeltaText;
+
     [Header("Animator (same rig/parameter on every player prefab)")]
     [SerializeField] private Animator _animator;
 
@@ -82,6 +85,8 @@ public class PlayerVoteIcon : MonoBehaviour
 
         _round.onVoteRevealed += OnVoteRevealed;
         _round.onDisplayNameChanged += OnDisplayNameChanged;
+        _round.onLocalScoreChanged += OnLocalScoreChanged;
+        _round.phase.onChanged += OnPhaseChanged;
     }
 
     private void OnDestroy()
@@ -91,6 +96,8 @@ public class PlayerVoteIcon : MonoBehaviour
 
         _round.onVoteRevealed -= OnVoteRevealed;
         _round.onDisplayNameChanged -= OnDisplayNameChanged;
+        _round.onLocalScoreChanged -= OnLocalScoreChanged;
+        _round.phase.onChanged -= OnPhaseChanged;
     }
 
     private void OnVoteRevealed(PlayerID voter, float position)
@@ -116,5 +123,26 @@ public class PlayerVoteIcon : MonoBehaviour
             _nameText.text = _round.GetDisplayName(_identity.owner.Value);
 
         _nameApplied = true;
+    }
+
+    private void OnLocalScoreChanged(int delta, int newTotal)
+    {
+        // onLocalScoreChanged only ever fires about MY OWN score, but every
+        // player's PlayerVoteIcon instance on my screen shares this same
+        // event - only the one that's actually mine should react, or my
+        // score would flash over everyone else's icon too.
+        if (!_identity.isOwner || !_scoreDeltaText)
+            return;
+
+        _scoreDeltaText.text = $"+{delta}";
+        _scoreDeltaText.gameObject.SetActive(true);
+    }
+
+    private void OnPhaseChanged(RoundPhase phase)
+    {
+        // Hide again once a fresh turn begins - put your DOTween trigger on
+        // this same GameObject reacting to OnEnable/OnDisable.
+        if (phase == RoundPhase.Targeting && _scoreDeltaText)
+            _scoreDeltaText.gameObject.SetActive(false);
     }
 }
