@@ -1,3 +1,4 @@
+using PurrNet;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -7,14 +8,26 @@ using UnityEngine.UI;
 /// crops this player's own RawImage to just that slot's portion of the
 /// shared RenderTexture. Purely local/visual - not networked, since every
 /// client independently stages and crops the same characters the same way.
+///
+/// Also listens for RoundManager's end-of-game podium reveal (public and
+/// identical on every client) and, if this instance's owner placed top 3,
+/// teleports the same character to the matching PodiumController slot.
 /// </summary>
+[RequireComponent(typeof(NetworkIdentity))]
 public class PlayerIconCapture : MonoBehaviour
 {
     [Tooltip("Root of the imported character sprite hierarchy - gets moved to this instance's claimed slot.")]
     [SerializeField] private Transform _characterRoot;
     [SerializeField] private RawImage _rawImage;
 
+    private NetworkIdentity _identity;
+    private RoundManager _round;
     private int _slotIndex = -1;
+
+    private void Awake()
+    {
+        _identity = GetComponent<NetworkIdentity>();
+    }
 
     private void Start()
     {
@@ -42,9 +55,45 @@ public class PlayerIconCapture : MonoBehaviour
         _rawImage.uvRect = stage.GetUvRectForSlot(_slotIndex);
     }
 
+    private void Update()
+    {
+        if (_round == null)
+        {
+            _round = RoundManager.instance;
+            if (_round != null)
+                _round.onPodiumRevealed += OnPodiumRevealed;
+        }
+    }
+
     private void OnDestroy()
     {
         if (_slotIndex >= 0 && PlayerIconStage.instance)
             PlayerIconStage.instance.ReleaseSlot(_slotIndex);
+
+        if (_round != null)
+            _round.onPodiumRevealed -= OnPodiumRevealed;
+    }
+
+    private void OnPodiumRevealed(PlayerID? first, PlayerID? second, PlayerID? third)
+    {
+        if (!_characterRoot || !_identity.owner.HasValue)
+            return;
+
+        var podium = PodiumController.instance;
+        if (!podium)
+        {
+            Debug.LogError("PlayerIconCapture: no PodiumController found in the scene.", this);
+            return;
+        }
+
+        var owner = _identity.owner.Value;
+        Transform slot = null;
+
+        if (first.HasValue && first.Value == owner) slot = podium.firstPlaceSlot;
+        else if (second.HasValue && second.Value == owner) slot = podium.secondPlaceSlot;
+        else if (third.HasValue && third.Value == owner) slot = podium.thirdPlaceSlot;
+
+        if (slot)
+            _characterRoot.SetPositionAndRotation(slot.position, slot.rotation);
     }
 }

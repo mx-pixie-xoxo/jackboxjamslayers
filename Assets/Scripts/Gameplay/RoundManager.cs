@@ -118,6 +118,7 @@ public class RoundManager : NetworkBehaviour
     public event Action<int, int> onLocalScoreChanged;
     public event Action<PlayerID, float> onVoteRevealed;
     public event Action<PlayerID, int> onFinalScoreRevealed;
+    public event Action<PlayerID?, PlayerID?, PlayerID?> onPodiumRevealed;
     public event Action<PlayerID, string> onDisplayNameChanged;
     public event Action onVotingEnded;
 
@@ -645,6 +646,8 @@ public class RoundManager : NetworkBehaviour
         foreach (var kvp in _scores)
             Rpc_RevealOneFinalScore(kvp.Key, kvp.Value);
 
+        BroadcastPodium();
+
         phase.value = RoundPhase.GameOver;
     }
 
@@ -652,6 +655,25 @@ public class RoundManager : NetworkBehaviour
     private void Rpc_RevealOneFinalScore(PlayerID playerId, int finalScore)
     {
         onFinalScoreRevealed?.Invoke(playerId, finalScore);
+    }
+
+    /// <summary>Ranks everyone by final score, descending, and tells every client who's 1st/2nd/3rd (null if fewer than that many players).</summary>
+    private void BroadcastPodium()
+    {
+        var ranked = new List<PlayerID>(_scores.Keys);
+        ranked.Sort((a, b) => _scores[b].CompareTo(_scores[a]));
+
+        PlayerID? first = ranked.Count > 0 ? ranked[0] : (PlayerID?)null;
+        PlayerID? second = ranked.Count > 1 ? ranked[1] : (PlayerID?)null;
+        PlayerID? third = ranked.Count > 2 ? ranked[2] : (PlayerID?)null;
+
+        Rpc_RevealPodium(first, second, third);
+    }
+
+    [ObserversRpc]
+    private void Rpc_RevealPodium(PlayerID? first, PlayerID? second, PlayerID? third)
+    {
+        onPodiumRevealed?.Invoke(first, second, third);
     }
 
     private static float DistanceToRange(float value, float min, float max)
