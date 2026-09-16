@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: d1136bc850406094098e70ca61680db0
+guid: f6fadc4ad5c2bbb45a4b701a81208145
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -2565883555323872123
-    second: Clipboard_0
+      213: -5354138556125360136
+    second: foreground-bg_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -46,7 +46,7 @@ TextureImporter:
   nPOTScale: 0
   lightmap: 0
   compressionQuality: 50
-  spriteMode: 1
+  spriteMode: 2
   spriteExtrude: 1
   spriteMeshType: 1
   alignment: 0
@@ -102,13 +102,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Clipboard_0
+      name: foreground-bg_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 850
-        height: 1100
+        width: 5760
+        height: 3240
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -117,8 +117,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 58c77e54086246cd0800000000000000
-      internalID: -2565883555323872123
+      spriteID: 8ffcce3c95742b5b0800000000000000
+      internalID: -5354138556125360136
       vertices: []
       indices: 
       edges: []
@@ -127,7 +127,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 5e97eb03825dee720800000000000000
+    spriteID: 
     internalID: 0
     vertices: []
     indices: 
@@ -137,7 +137,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Clipboard_0: -2565883555323872123
+      foreground-bg_0: -5354138556125360136
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
