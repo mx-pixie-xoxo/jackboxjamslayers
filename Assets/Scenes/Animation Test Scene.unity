@@ -583,6 +583,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 284186586095238890, guid: 334c1c504b5fbd246a655e7833696173, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: -89
+      objectReference: {fileID: 0}
     - target: {fileID: 1982616122170284029, guid: 334c1c504b5fbd246a655e7833696173, type: 3}
       propertyPath: m_Name
       value: Bar Title
@@ -775,6 +779,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 284186586095238890, guid: 9bb2cd64d506fdd42aff8d20406329fa, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: -98
+      objectReference: {fileID: 0}
     - target: {fileID: 1982616122170284029, guid: 9bb2cd64d506fdd42aff8d20406329fa, type: 3}
       propertyPath: m_Name
       value: Ring Title
@@ -1052,6 +1060,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 284186586095238890, guid: 89ba966dc9163c046953d9a0d2b456c1, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: -93
+      objectReference: {fileID: 0}
     - target: {fileID: 1982616122170284029, guid: 89ba966dc9163c046953d9a0d2b456c1, type: 3}
       propertyPath: m_Name
       value: Circle Title
@@ -1331,6 +1343,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 284186586095238890, guid: 13a6ca7e19095a54a89b1c623bae9d83, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: -88
+      objectReference: {fileID: 0}
     - target: {fileID: 1982616122170284029, guid: 13a6ca7e19095a54a89b1c623bae9d83, type: 3}
       propertyPath: m_Name
       value: Needle Title
@@ -1850,6 +1866,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 284186586095238890, guid: e80eb5a30a2a63a42b92cc6163788097, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: -99
+      objectReference: {fileID: 0}
     - target: {fileID: 1982616122170284029, guid: e80eb5a30a2a63a42b92cc6163788097, type: 3}
       propertyPath: m_Name
       value: Oval Title
@@ -2377,6 +2397,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 284186586095238890, guid: 350b7af9c6565b14f8dcac413c853846, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: -98
+      objectReference: {fileID: 0}
     - target: {fileID: 1982616122170284029, guid: 350b7af9c6565b14f8dcac413c853846, type: 3}
       propertyPath: m_Name
       value: Sphere Title
@@ -2564,6 +2588,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 284186586095238890, guid: e240052e25356ba4d9d03da54ea20afe, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: -91
+      objectReference: {fileID: 0}
     - target: {fileID: 1982616122170284029, guid: e240052e25356ba4d9d03da54ea20afe, type: 3}
       propertyPath: m_Name
       value: U Title
