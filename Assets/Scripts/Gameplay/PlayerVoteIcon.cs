@@ -64,7 +64,7 @@ public class PlayerVoteIcon : MonoBehaviour
         if (isMoving && _sprite)
         {
             bool movingRight = newX > currentX;
-            _sprite.localEulerAngles = new Vector3(0f, movingRight ? 0f : 180f, 0f);
+            _sprite.localEulerAngles = new Vector3(0f, movingRight ? 180f : 0f, 0f);
         }
 
         if (_animator)
