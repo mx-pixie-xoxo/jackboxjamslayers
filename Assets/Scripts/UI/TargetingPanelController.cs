@@ -34,18 +34,37 @@ public class TargetingPanelController : MonoBehaviour
     [Tooltip("Same idea, driven to the midpoint of the active player's secret goal range.")]
     [SerializeField] private RectTransform _targetMeanMarker;
 
+    [Header("Timer (display only - the server enforces the real timeout)")]
+    [SerializeField] private TMP_Text _timerText;
+
     private const string CurrentMeanColorHex = "0000FF";
     private const string TargetMeanColorHex = "FF0000";
 
     private RoundManager _round;
     private bool _wasMyTurn;
+    private float _countdown;
+    private bool _timerRunning;
 
     private void Update()
     {
         if (_round == null)
+        {
             TryBind();
-        else
-            Refresh();
+            return;
+        }
+
+        if (_timerRunning)
+        {
+            _countdown = Mathf.Max(0f, _countdown - Time.deltaTime);
+
+            if (_timerText)
+                _timerText.text = $"{Mathf.CeilToInt(_countdown)}s";
+
+            if (_countdown <= 0f)
+                _timerRunning = false; // just stops the display - the server owns the actual timeout
+        }
+
+        Refresh();
     }
 
     private void TryBind()
@@ -176,6 +195,12 @@ public class TargetingPanelController : MonoBehaviour
         {
             _round.Rpc_RequestSecretGoal();
             ResetInput();
+            _countdown = _round.targetingDuration;
+            _timerRunning = true;
+        }
+        else if (!isMyTurn && _wasMyTurn)
+        {
+            _timerRunning = false;
         }
 
         _wasMyTurn = isMyTurn;

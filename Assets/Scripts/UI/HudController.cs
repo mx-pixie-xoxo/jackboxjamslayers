@@ -8,6 +8,7 @@ using UnityEngine;
 /// </summary>
 public class HudController : MonoBehaviour
 {
+    [SerializeField] private TMP_Text _roundText;
     [SerializeField] private TMP_Text _promptText;
     [SerializeField] private TMP_Text _leftLabelText;
     [SerializeField] private TMP_Text _rightLabelText;
@@ -30,6 +31,8 @@ public class HudController : MonoBehaviour
             return;
 
         _round.phase.onChanged += OnPhaseChanged;
+        _round.roundNumber.onChanged += OnRoundCountChanged;
+        _round.totalRounds.onChanged += OnRoundCountChanged;
         _round.promptText.onChanged += OnPromptChanged;
         _round.leftLabel.onChanged += OnLeftLabelChanged;
         _round.rightLabel.onChanged += OnRightLabelChanged;
@@ -38,6 +41,7 @@ public class HudController : MonoBehaviour
         _round.onDisplayNameChanged += OnDisplayNameChanged;
 
         OnPhaseChanged(_round.phase.value);
+        UpdateRoundText();
         OnPromptChanged(_round.promptText.value);
         OnLeftLabelChanged(_round.leftLabel.value);
         OnRightLabelChanged(_round.rightLabel.value);
@@ -50,6 +54,8 @@ public class HudController : MonoBehaviour
             return;
 
         _round.phase.onChanged -= OnPhaseChanged;
+        _round.roundNumber.onChanged -= OnRoundCountChanged;
+        _round.totalRounds.onChanged -= OnRoundCountChanged;
         _round.promptText.onChanged -= OnPromptChanged;
         _round.leftLabel.onChanged -= OnLeftLabelChanged;
         _round.rightLabel.onChanged -= OnRightLabelChanged;
@@ -63,6 +69,14 @@ public class HudController : MonoBehaviour
     {
         if (_waitingForPlayersPanel)
             _waitingForPlayersPanel.SetActive(phase == RoundPhase.WaitingForPlayers);
+    }
+
+    private void OnRoundCountChanged(int _) => UpdateRoundText();
+
+    private void UpdateRoundText()
+    {
+        if (_roundText)
+            _roundText.text = $"Round {_round.roundNumber.value}/{_round.totalRounds.value}";
     }
 
     private void OnPromptChanged(string value)
