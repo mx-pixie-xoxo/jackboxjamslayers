@@ -1,7 +1,9 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class IntroManager : MonoBehaviour
 {
+    public string lobbyScene = "MainMenu";
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
@@ -12,5 +14,9 @@ public class IntroManager : MonoBehaviour
     void Update()
     {
         
+    }
+    public void SkipIntro()
+    {
+        SceneManager.LoadScene(lobbyScene);
     }
 }
