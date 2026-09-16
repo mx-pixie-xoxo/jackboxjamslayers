@@ -642,7 +642,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Texture: {fileID: 2800000, guid: 9b0f3ab3603d12b43b3cc820daee272a, type: 3}
+  m_Texture: {fileID: 2800000, guid: fb3262a52786dda418da6663eb6ba138, type: 3}
   m_UVRect:
     serializedVersion: 2
     x: 0
@@ -1120,8 +1120,8 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 2177484222411551717}
-  - {fileID: 5903894986676918972}
   - {fileID: 8149860143750200926}
+  - {fileID: 5903894986676918972}
   m_Father: {fileID: 6936209515626006180}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -1332,7 +1332,7 @@ Canvas:
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
   m_UseReflectionProbes: 0
-  m_AdditionalShaderChannelsFlag: 0
+  m_AdditionalShaderChannelsFlag: 31
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
   m_SortingOrder: -1
@@ -1392,7 +1392,7 @@ MonoBehaviour:
   m_Padding:
     m_Left: 0
     m_Right: 0
-    m_Top: 284
+    m_Top: 178
     m_Bottom: 0
   m_ChildAlignment: 0
   m_Spacing: 8
