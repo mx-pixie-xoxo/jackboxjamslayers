@@ -550,6 +550,45 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 70089273}
   m_CullTransparentMesh: 1
+--- !u!21 &71175056
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Disc Opaque (SECTOR) (instance)
+  m_Shader: {fileID: 4800000, guid: 2ac8d323a50a5a44e8422f7d238d1b3e, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords:
+  - SECTOR
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 1
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats:
+    - _ColorMask: 15
+    - _StencilComp: 8
+    - _StencilID: 0
+    - _StencilOp: 0
+    - _StencilOpPass: 0
+    - _StencilReadMask: 255
+    - _StencilWriteMask: 255
+    - _ZOffsetFactor: 0
+    - _ZOffsetUnits: 0
+    - _ZTest: 0
+    m_Colors: []
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1
 --- !u!1 &81957520
 GameObject:
   m_ObjectHideFlags: 0
@@ -2815,7 +2854,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 1529621756}
+  - {fileID: 71175056}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -6221,7 +6260,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 541}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &882306214
@@ -9634,11 +9673,11 @@ MonoBehaviour:
   _musicSource: {fileID: 485157991}
   _targetingMusic: {fileID: 8300000, guid: 69882aebffaef1f4994a36066f32d754, type: 3}
   _votingMusic: {fileID: 8300000, guid: dcdcba4e7a8571e46862a9393ecd8ad9, type: 3}
-  _sfxSource: {fileID: 832430387}
-  _yourTurnClip: {fileID: 8300000, guid: da0b31348e6473a4a8a9106f10d2ef35, type: 3}
-  _votingWarningClip: {fileID: 8300000, guid: 7dde8786532402f4db43bb9246996941, type: 3}
+  _sfxSource: {fileID: 0}
+  _yourTurnClip: {fileID: 0}
+  _votingWarningClip: {fileID: 0}
   _votingWarningSecondsBeforeEnd: 10
-  _votingEndedClip: {fileID: 8300000, guid: eb6ea63a5c7d7b2479bf5bd0522458bd, type: 3}
+  _votingEndedClip: {fileID: 0}
 --- !u!4 &1272101919
 Transform:
   m_ObjectHideFlags: 0
@@ -10725,45 +10764,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1502883847}
   m_CullTransparentMesh: 1
---- !u!21 &1529621756
-Material:
-  serializedVersion: 8
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: Disc Opaque (SECTOR) (instance)
-  m_Shader: {fileID: 4800000, guid: 2ac8d323a50a5a44e8422f7d238d1b3e, type: 3}
-  m_Parent: {fileID: 0}
-  m_ModifiedSerializedProperties: 0
-  m_ValidKeywords:
-  - SECTOR
-  m_InvalidKeywords: []
-  m_LightmapFlags: 4
-  m_EnableInstancingVariants: 1
-  m_DoubleSidedGI: 0
-  m_CustomRenderQueue: -1
-  stringTagMap: {}
-  disabledShaderPasses: []
-  m_LockedProperties: 
-  m_SavedProperties:
-    serializedVersion: 3
-    m_TexEnvs: []
-    m_Ints: []
-    m_Floats:
-    - _ColorMask: 15
-    - _StencilComp: 8
-    - _StencilID: 0
-    - _StencilOp: 0
-    - _StencilOpPass: 0
-    - _StencilReadMask: 255
-    - _StencilWriteMask: 255
-    - _ZOffsetFactor: 0
-    - _ZOffsetUnits: 0
-    - _ZTest: 0
-    m_Colors: []
-  m_BuildTextureStacks: []
-  m_AllowLocking: 1
 --- !u!1 &1530357937
 GameObject:
   m_ObjectHideFlags: 0
@@ -15906,7 +15906,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &2068201407
 RectTransform:
   m_ObjectHideFlags: 0
