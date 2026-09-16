@@ -33,7 +33,8 @@ public class GameAudioController : MonoBehaviour
     private bool _votingWarningPlayedThisTurn;
     private float _votingCountdown;
     private bool _votingCountdownRunning;
-    private int _lastYourTurnCueTurnNumber = -1;
+    private float _lastYourTurnGoalMin = float.NaN;
+    private float _lastYourTurnGoalMax = float.NaN;
 
     private void Update()
     {
@@ -64,13 +65,6 @@ public class GameAudioController : MonoBehaviour
         _round.phase.onChanged += OnPhaseChanged;
         _round.onLocalGoalReceived += OnLocalGoalReceived;
         _round.onVotingEnded += OnVotingEnded;
-
-        // Temporary diagnostic: if this ever prints more than once without a
-        // matching "unbound" log in between, there's more than one
-        // GameAudioController subscribed at once - each with its own
-        // independent de-dupe state - which alone would explain a cue
-        // playing twice regardless of how many times the server sends it.
-        Debug.Log($"[GameAudioController:{GetEntityId()}] bound to RoundManager.");
     }
 
     private void OnDestroy()
@@ -108,21 +102,24 @@ public class GameAudioController : MonoBehaviour
 
     private void OnLocalGoalReceived(float min, float max)
     {
-        // Temporary diagnostic - shows every call this specific instance
-        // receives, its current turn number, and whether the de-dupe guard
-        // let it through. If two PLAYING lines appear for the SAME turn
-        // number, the guard itself is broken; if they show DIFFERENT
-        // instance ids, it's a duplicate-component problem instead.
-        bool willPlay = _lastYourTurnCueTurnNumber != _round.turnNumber.value;
-        Debug.Log($"[GameAudioController:{GetEntityId()}] onLocalGoalReceived, turn={_round.turnNumber.value}, " +
-                  $"lastPlayedTurn={_lastYourTurnCueTurnNumber} -> {(willPlay ? "PLAYING" : "skipped (already played this turn)")}");
-
         // This can fire more than once per turn (the targeting panel
-        // defensively re-requests it) - only play the cue once per turn.
-        if (!willPlay)
+        // defensively re-requests it) - de-dupe on the goal range itself
+        // rather than RoundManager.turnNumber. That SyncVar and this RPC
+        // are delivered independently, and on a real (non-loopback)
+        // connection can apply out of order relative to each other, which
+        // let a duplicate slip through when comparing against turnNumber.
+        // The push and the defensive re-request always carry the identical
+        // (min, max) for a given turn, so comparing the payload itself
+        // isn't vulnerable to that ordering hazard.
+        bool isDuplicate = !float.IsNaN(_lastYourTurnGoalMin) &&
+                           Mathf.Approximately(_lastYourTurnGoalMin, min) &&
+                           Mathf.Approximately(_lastYourTurnGoalMax, max);
+
+        if (isDuplicate)
             return;
 
-        _lastYourTurnCueTurnNumber = _round.turnNumber.value;
+        _lastYourTurnGoalMin = min;
+        _lastYourTurnGoalMax = max;
         PlaySfx(_yourTurnClip);
     }
 

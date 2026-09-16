@@ -28,6 +28,11 @@ public class PlayerVoteIcon : MonoBehaviour
     [Header("Name label - parent it under the icon so it moves along with it")]
     [SerializeField] private TMP_Text _nameText;
 
+    [Header("Animator (same rig/parameter on every player prefab)")]
+    [SerializeField] private Animator _animator;
+
+    private static readonly int IsMovingHash = Animator.StringToHash("IsMoving");
+
     private NetworkIdentity _identity;
     private RoundManager _round;
     private float _targetX = 0.5f;
@@ -54,12 +59,16 @@ public class PlayerVoteIcon : MonoBehaviour
 
         float currentX = _icon.anchorMin.x;
         float newX = Mathf.MoveTowards(currentX, _targetX, _moveSpeed * Time.deltaTime);
+        bool isMoving = !Mathf.Approximately(newX, currentX);
 
-        if (!Mathf.Approximately(newX, currentX) && _sprite)
+        if (isMoving && _sprite)
         {
             bool movingRight = newX > currentX;
             _sprite.localEulerAngles = new Vector3(0f, movingRight ? 0f : 180f, 0f);
         }
+
+        if (_animator)
+            _animator.SetBool(IsMovingHash, isMoving);
 
         _icon.anchorMin = new Vector2(newX, _icon.anchorMin.y);
         _icon.anchorMax = new Vector2(newX, _icon.anchorMax.y);
