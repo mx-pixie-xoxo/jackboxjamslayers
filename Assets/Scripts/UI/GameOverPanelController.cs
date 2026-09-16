@@ -52,7 +52,7 @@ public class GameOverPanelController : MonoBehaviour
 
     private void OnFinalScoreRevealed(PlayerID player, int finalScore)
     {
-        _lines.Add($"{player}: {finalScore}");
+        _lines.Add($"{_round.GetDisplayName(player)}: {finalScore}");
         if (_leaderboardText)
             _leaderboardText.text = string.Join("\n", _lines);
     }
