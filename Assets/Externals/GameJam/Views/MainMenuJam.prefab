@@ -18,7 +18,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &400384232050867799
 RectTransform:
   m_ObjectHideFlags: 0
@@ -33,10 +33,10 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 6936209515626006180}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 640.18475, y: -121}
+  m_SizeDelta: {x: 1240.3695, y: 128}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &1452692795989568928
 CanvasRenderer:
@@ -232,7 +232,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &2172061482204274643
 RectTransform:
   m_ObjectHideFlags: 0
@@ -642,7 +642,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Texture: {fileID: 2800000, guid: de2183d1c96c0874a97fea4b374b2c42, type: 3}
+  m_Texture: {fileID: 2800000, guid: 9b0f3ab3603d12b43b3cc820daee272a, type: 3}
   m_UVRect:
     serializedVersion: 2
     x: 0
@@ -707,7 +707,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: PurrUI.Runtime::PurrNet.UI.GraphicOpacity
   _graphic: {fileID: 538479077488482418}
-  _opacity: 0.019607844
+  _opacity: 1
   _fillOnly: 0
 --- !u!1 &4653550485553620758
 GameObject:
@@ -1392,7 +1392,7 @@ MonoBehaviour:
   m_Padding:
     m_Left: 0
     m_Right: 0
-    m_Top: 0
+    m_Top: 284
     m_Bottom: 0
   m_ChildAlignment: 0
   m_Spacing: 8
