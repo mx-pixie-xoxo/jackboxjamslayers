@@ -21,7 +21,7 @@ public class GameAudioController : MonoBehaviour
     [SerializeField] private AudioSource _sfxSource;
     [Tooltip("Plays only for the active player, the moment it becomes their turn to input a word.")]
     [SerializeField] private AudioClip _yourTurnClip;
-    [Tooltip("Plays for everyone, a set number of seconds before voting closes.")]
+    [Tooltip("Plays only for audience members (not the active player), a set number of seconds before voting closes.")]
     [SerializeField] private AudioClip _votingWarningClip;
     [SerializeField] private float _votingWarningSecondsBeforeEnd = 10f;
     [Tooltip("Plays for everyone the moment voting closes (whether by everyone submitting or by timeout).")]
@@ -85,7 +85,7 @@ public class GameAudioController : MonoBehaviour
                 PlayMusic(_votingMusic);
                 _votingWarningPlayedThisTurn = false;
                 _votingCountdown = _round.votingDuration;
-                _votingCountdownRunning = true;
+                _votingCountdownRunning = !IsActivePlayer(); // the active player isn't voting - no warning for them
                 break;
             default:
                 _votingCountdownRunning = false;
@@ -108,6 +108,13 @@ public class GameAudioController : MonoBehaviour
     {
         _votingCountdownRunning = false;
         PlaySfx(_votingEndedClip);
+    }
+
+    private bool IsActivePlayer()
+    {
+        return _round.activePlayerId.value.HasValue &&
+               RoundManager.TryGetLocalPlayerId(out var localId) &&
+               _round.activePlayerId.value.Value == localId;
     }
 
     private void PlayMusic(AudioClip clip)

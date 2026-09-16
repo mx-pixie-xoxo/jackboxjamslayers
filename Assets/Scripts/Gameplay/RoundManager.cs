@@ -130,12 +130,32 @@ public class RoundManager : NetworkBehaviour
         instance = this;
 
         if (!asServer)
+        {
+            ReportLocalDisplayName();
             return;
+        }
 
         networkManager.onPlayerLoadedScene += OnPlayerLoadedScene;
         networkManager.onPlayerUnloadedScene += OnPlayerUnloadedScene;
 
         TryBeginRoundIfReady();
+    }
+
+    /// <summary>
+    /// Client-only. Reports this client's own PurrLobby display name to the
+    /// server. This is the client's own known identity (from the lobby it
+    /// came from), not something the server needs to reverse-engineer -
+    /// deliberately not using a Connection -> lobby-id bridge here, since
+    /// the game session's NetworkManager has no authenticator of its own
+    /// (that only exists on the separate lobby-session NetworkManager).
+    /// </summary>
+    private void ReportLocalDisplayName()
+    {
+        var lobby = GameOrchestrator.active != null ? GameOrchestrator.active.activeLobby : null;
+        var localPlayer = lobby != null ? lobby.localPlayer : null;
+
+        if (localPlayer != null && !string.IsNullOrEmpty(localPlayer.displayName))
+            Rpc_ReportMyDisplayName(localPlayer.displayName);
     }
 
     protected override void OnDestroy()
@@ -176,54 +196,31 @@ public class RoundManager : NetworkBehaviour
             _unpickedActivePlayers.Add(player);
         }
 
-        ResolveAndBroadcastDisplayName(player);
         TryBeginRoundIfReady();
     }
 
     /// <summary>
-    /// Server-only. Bridges PurrNet's low-level PlayerID to PurrLobby's
-    /// display name: PlayerID -> Connection (PlayersManager) -> lobby's own
-    /// string player-id (IProvideConnectionToPlayerID) -> IPlayer.displayName
-    /// (the active lobby). Same chain PurrLobbyPlayer.Setup already uses
-    /// internally - this just makes the result available to everyone in the
-    /// game scene instead of only the lobby-scene UI.
+    /// Server-only. The client reports its own display name (it always
+    /// knows this, regardless of which auth/session setup got it into this
+    /// game); the server just records and relays it.
     /// </summary>
-    private void ResolveAndBroadcastDisplayName(PlayerID player)
+    [ServerRpc(requireOwnership: false)]
+    private void Rpc_ReportMyDisplayName(string displayName, RPCInfo info = default)
     {
+        if (string.IsNullOrWhiteSpace(displayName))
+            return;
+
         // Catch this (possibly late-joining) player up on every name already
-        // known - a plain ObserversRpc broadcast at resolve-time would never
-        // reach someone who joins after it fired.
+        // known - a plain broadcast at report-time would never reach someone
+        // who joins after an earlier player's report already went out.
         foreach (var kvp in _displayNames)
-            Target_SetDisplayName(player, kvp.Key, kvp.Value);
+            Target_SetDisplayName(info.sender, kvp.Key, kvp.Value);
 
-        if (_displayNames.ContainsKey(player))
+        if (_displayNames.TryGetValue(info.sender, out var existing) && existing == displayName)
             return;
 
-        if (!TryResolveDisplayName(player, out var name))
-            return;
-
-        _displayNames[player] = name;
-        Rpc_SetDisplayName(player, name);
-    }
-
-    private bool TryResolveDisplayName(PlayerID player, out string displayName)
-    {
-        displayName = null;
-
-        if (!networkManager.TryGetModule<PlayersManager>(true, out var players) ||
-            !players.TryGetConnection(player, out var conn))
-            return false;
-
-        if (networkManager.authenticator is not IProvideConnectionToPlayerID provider ||
-            !provider.TryGetPlayerID(conn, out var lobbyPlayerId))
-            return false;
-
-        var lobby = GameOrchestrator.active != null ? GameOrchestrator.active.activeLobby : null;
-        if (lobby == null || !lobby.TryGetPlayer(lobbyPlayerId, out var lobbyPlayer))
-            return false;
-
-        displayName = lobbyPlayer.displayName;
-        return true;
+        _displayNames[info.sender] = displayName;
+        Rpc_SetDisplayName(info.sender, displayName);
     }
 
     [ObserversRpc]
