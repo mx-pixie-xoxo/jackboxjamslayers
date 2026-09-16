@@ -17,6 +17,10 @@ using UnityEngine;
 /// reveal, everyone's score) never becomes a SyncVar - it lives only in
 /// plain server-only fields below and is pushed to the right client via
 /// TargetRpc. That's the entire privacy mechanism; nothing else is needed.
+///
+/// The turn loop is a chain of coroutines, each pausing at a named phase for
+/// a configurable duration before advancing - this gives UI/animation/audio
+/// a guaranteed window per phase instead of everything happening instantly.
 /// </summary>
 public class RoundManager : NetworkBehaviour
 {
@@ -41,13 +45,29 @@ public class RoundManager : NetworkBehaviour
     [SerializeField] private float _minGoalWidth = 0.1f;
     [SerializeField] private float _maxGoalWidth = 0.2f;
 
-    [Header("Turn timers (seconds)")]
+    [Header("Turn timers (seconds) - wait for input up to this long")]
     [Tooltip("How long the active player has to submit a new label before voting opens anyway, unchanged.")]
     [SerializeField, Range(5f, 120f)] private float _targetingDuration = 30f;
     [Tooltip("How long the audience has to vote before the server force-reveals with whatever votes it has.")]
     [SerializeField, Range(5f, 180f)] private float _votingDuration = 45f;
     [Tooltip("Extra time the server waits past votingDuration before force-revealing, so a client's own time-triggered auto-submit has a chance to arrive over the network first.")]
     [SerializeField, Range(0f, 15f)] private float _votingTimeoutGraceSeconds = 3f;
+
+    [Header("Phase buffers (seconds) - fixed pause between steps for animations/audio")]
+    [Tooltip("Before the targeting loop begins - at game start, and again at the start of every new round.")]
+    [SerializeField, Range(0f, 10f)] private float _roundIntroDuration = 2f;
+    [Tooltip("After the active player's turn ends, before voting opens.")]
+    [SerializeField, Range(0f, 10f)] private float _targetingCompleteDuration = 1f;
+    [Tooltip("After voting closes, before the player icons start moving.")]
+    [SerializeField, Range(0f, 10f)] private float _votingCompleteDuration = 1f;
+    [Tooltip("While the player icons animate to their revealed positions.")]
+    [SerializeField, Range(0f, 10f)] private float _revealMovingDuration = 2f;
+    [Tooltip("After the pendulum cue plays, before the pendulum starts moving.")]
+    [SerializeField, Range(0f, 10f)] private float _pendulumCueDuration = 1f;
+    [Tooltip("While the pendulum animates to its final position, before points are awarded.")]
+    [SerializeField, Range(0f, 10f)] private float _pendulumMovingDuration = 2f;
+    [Tooltip("After points are awarded, before the next active player is chosen.")]
+    [SerializeField, Range(0f, 10f)] private float _turnCompleteDuration = 1f;
 
     /// <summary>Same duration the server enforces - UI countdowns should read this instead of hardcoding a copy.</summary>
     public float targetingDuration => _targetingDuration;
@@ -75,6 +95,7 @@ public class RoundManager : NetworkBehaviour
     private readonly Dictionary<PlayerID, float> _pendingVotes = new Dictionary<PlayerID, float>();
     private readonly HashSet<PlayerID> _votedThisTurn = new HashSet<PlayerID>();
     private readonly Dictionary<PlayerID, int> _scores = new Dictionary<PlayerID, int>();
+    private float _pendingPendulumValue;
 
     // Doubles as the server's resolved-name cache and each client's local
     // display-name cache (populated via the RPCs below) - display names
@@ -82,6 +103,7 @@ public class RoundManager : NetworkBehaviour
     private readonly Dictionary<PlayerID, string> _displayNames = new Dictionary<PlayerID, string>();
 
     private Coroutine _phaseTimeoutRoutine;
+    private Coroutine _phaseSequenceRoutine;
 
     private readonly List<RoundContent> _roundsToPlay = new List<RoundContent>();
     private int _currentRoundIndex = -1;
@@ -269,7 +291,7 @@ public class RoundManager : NetworkBehaviour
         PrepareRoundsToPlay();
         _currentRoundIndex = -1;
 
-        StartNextRound(roster);
+        BeginRoundIntroSequence(roster);
     }
 
     /// <summary>Randomly picks (without repeats, where possible) which authored Round Content entries this game will play, in order.</summary>
@@ -299,8 +321,8 @@ public class RoundManager : NetworkBehaviour
         totalRounds.value = _roundsToPlay.Count;
     }
 
-    /// <summary>Applies the next authored round's content and resets the active-player pool for it.</summary>
-    private void StartNextRound(IReadOnlyList<PlayerID> roster)
+    /// <summary>Applies the next authored round's content and resets the active-player pool, then pauses (RoundIntro) before the targeting loop begins.</summary>
+    private void BeginRoundIntroSequence(IReadOnlyList<PlayerID> roster)
     {
         _currentRoundIndex++;
         roundNumber.value = _currentRoundIndex + 1; // 1-based for display
@@ -318,6 +340,12 @@ public class RoundManager : NetworkBehaviour
         turnNumber.value = 0;
 
         phase.value = RoundPhase.RoundIntro;
+        RunPhaseSequence(RoundIntroRoutine());
+    }
+
+    private IEnumerator RoundIntroRoutine()
+    {
+        yield return new WaitForSeconds(_roundIntroDuration);
         BeginTargeting();
     }
 
@@ -328,7 +356,7 @@ public class RoundManager : NetworkBehaviour
             bool hasMoreRounds = _currentRoundIndex + 1 < _roundsToPlay.Count;
             if (hasMoreRounds && networkManager.TryGetModule<PlayersManager>(true, out var players))
             {
-                StartNextRound(players.players);
+                BeginRoundIntroSequence(players.players);
                 return;
             }
 
@@ -353,13 +381,13 @@ public class RoundManager : NetworkBehaviour
         StartPhaseTimeout(_targetingDuration, OnTargetingTimeout);
     }
 
-    /// <summary>The active player ran out of time - proceed to voting with whatever the labels already were, unchanged.</summary>
+    /// <summary>The active player ran out of time - proceed with whatever the labels already were, unchanged.</summary>
     private void OnTargetingTimeout()
     {
         if (phase.value != RoundPhase.Targeting)
             return;
 
-        OpenVoting();
+        BeginTargetingCompleteSequence();
     }
 
     [TargetRpc]
@@ -408,13 +436,24 @@ public class RoundManager : NetworkBehaviour
         else
             rightLabel.value = newLabel;
 
+        BeginTargetingCompleteSequence();
+    }
+
+    private void BeginTargetingCompleteSequence()
+    {
+        CancelPhaseTimeout();
+        phase.value = RoundPhase.TargetingComplete;
+        RunPhaseSequence(TargetingCompleteRoutine());
+    }
+
+    private IEnumerator TargetingCompleteRoutine()
+    {
+        yield return new WaitForSeconds(_targetingCompleteDuration);
         OpenVoting();
     }
 
     private void OpenVoting()
     {
-        CancelPhaseTimeout();
-
         _pendingVotes.Clear();
         _votedThisTurn.Clear();
         votesSubmittedCount.value = 0;
@@ -430,7 +469,7 @@ public class RoundManager : NetworkBehaviour
 
         if (votesExpectedCount.value <= 0)
         {
-            Reveal();
+            BeginVotingCompleteSequence();
             return;
         }
 
@@ -442,7 +481,7 @@ public class RoundManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Backstop only - reveals with whatever votes actually arrived. Clients
+    /// Backstop only - proceeds with whatever votes actually arrived. Clients
     /// are expected to auto-submit their own current slider value the moment
     /// their local countdown hits zero, so this should rarely fire with
     /// anyone still missing.
@@ -452,7 +491,7 @@ public class RoundManager : NetworkBehaviour
         if (phase.value != RoundPhase.VotingOpen)
             return;
 
-        Reveal();
+        BeginVotingCompleteSequence();
     }
 
     [ServerRpc(requireOwnership: false)]
@@ -471,21 +510,35 @@ public class RoundManager : NetworkBehaviour
         votesSubmittedCount.value = _votedThisTurn.Count;
 
         if (votesSubmittedCount.value >= votesExpectedCount.value)
-            Reveal();
+            BeginVotingCompleteSequence();
     }
 
-    private void Reveal()
+    private void BeginVotingCompleteSequence()
     {
         CancelPhaseTimeout();
-        phase.value = RoundPhase.Revealing;
+        phase.value = RoundPhase.VotingComplete;
 
-        // Explicit broadcast rather than relying on the phase SyncVar itself:
-        // Revealing/Scoring/TurnComplete all happen synchronously in this
-        // same call stack, so a client could observe phase jump straight
-        // from VotingOpen to the next Targeting without ever seeing the
-        // intermediate values - this RPC is still delivered as its own
-        // discrete message regardless.
+        // Explicit broadcast rather than relying on clients observing this
+        // phase value itself - fine either way here since VotingComplete is
+        // a real, held phase (not a synchronous pass-through), but kept as
+        // its own event since audio code already expects it.
         Rpc_VotingEnded();
+
+        RunPhaseSequence(VotingCompleteRoutine());
+    }
+
+    private IEnumerator VotingCompleteRoutine()
+    {
+        yield return new WaitForSeconds(_votingCompleteDuration);
+        RevealVotes();
+    }
+
+    [ObserversRpc]
+    private void Rpc_VotingEnded() => onVotingEnded?.Invoke();
+
+    private void RevealVotes()
+    {
+        phase.value = RoundPhase.RevealMoving;
 
         float sum = 0f;
         foreach (var kvp in _pendingVotes)
@@ -494,9 +547,12 @@ public class RoundManager : NetworkBehaviour
             Rpc_RevealOneVote(kvp.Key, kvp.Value);
         }
 
-        pendulumValue.value = _pendingVotes.Count > 0 ? sum / _pendingVotes.Count : 0.5f;
+        // Not applied to the pendulumValue SyncVar yet - that happens at
+        // BeginPendulumMoving, once the cue has played, so the visual swing
+        // starts exactly when it's supposed to.
+        _pendingPendulumValue = _pendingVotes.Count > 0 ? sum / _pendingVotes.Count : 0.5f;
 
-        ScoreTurn();
+        RunPhaseSequence(RevealMovingRoutine());
     }
 
     [ObserversRpc]
@@ -505,8 +561,36 @@ public class RoundManager : NetworkBehaviour
         onVoteRevealed?.Invoke(voterId, position);
     }
 
-    [ObserversRpc]
-    private void Rpc_VotingEnded() => onVotingEnded?.Invoke();
+    private IEnumerator RevealMovingRoutine()
+    {
+        yield return new WaitForSeconds(_revealMovingDuration);
+        BeginPendulumCue();
+    }
+
+    private void BeginPendulumCue()
+    {
+        phase.value = RoundPhase.PendulumCue;
+        RunPhaseSequence(PendulumCueRoutine());
+    }
+
+    private IEnumerator PendulumCueRoutine()
+    {
+        yield return new WaitForSeconds(_pendulumCueDuration);
+        BeginPendulumMoving();
+    }
+
+    private void BeginPendulumMoving()
+    {
+        phase.value = RoundPhase.PendulumMoving;
+        pendulumValue.value = _pendingPendulumValue;
+        RunPhaseSequence(PendulumMovingRoutine());
+    }
+
+    private IEnumerator PendulumMovingRoutine()
+    {
+        yield return new WaitForSeconds(_pendulumMovingDuration);
+        ScoreTurn();
+    }
 
     private void ScoreTurn()
     {
@@ -532,6 +616,12 @@ public class RoundManager : NetworkBehaviour
 
         _currentGoalRange = null;
         phase.value = RoundPhase.TurnComplete;
+        RunPhaseSequence(TurnCompleteRoutine());
+    }
+
+    private IEnumerator TurnCompleteRoutine()
+    {
+        yield return new WaitForSeconds(_turnCompleteDuration);
         BeginTargeting();
     }
 
@@ -577,6 +667,15 @@ public class RoundManager : NetworkBehaviour
         // (closer = more points) but not a formula. Needs a tuning pass.
         float t = Mathf.Clamp01(1f - distance * 2f);
         return Mathf.RoundToInt(t * _maxPointsPerTurn);
+    }
+
+    /// <summary>Runs one of the fixed-duration phase-buffer coroutines above, cancelling any previous one (defensive - callers shouldn't overlap, but a stray old routine must never keep running into the wrong phase).</summary>
+    private void RunPhaseSequence(IEnumerator routine)
+    {
+        if (_phaseSequenceRoutine != null)
+            StopCoroutine(_phaseSequenceRoutine);
+
+        _phaseSequenceRoutine = StartCoroutine(routine);
     }
 
     private void StartPhaseTimeout(float duration, Action onTimeout)

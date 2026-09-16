@@ -51,7 +51,9 @@ public class RevealPanelController : MonoBehaviour
 
     private void OnPhaseChanged(RoundPhase phase)
     {
-        bool show = phase == RoundPhase.Revealing || phase == RoundPhase.Scoring || phase == RoundPhase.TurnComplete;
+        bool show = phase == RoundPhase.RevealMoving || phase == RoundPhase.PendulumCue ||
+                    phase == RoundPhase.PendulumMoving || phase == RoundPhase.Scoring ||
+                    phase == RoundPhase.TurnComplete;
 
         if (_panelRoot)
             _panelRoot.SetActive(show);

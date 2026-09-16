@@ -26,6 +26,8 @@ public class GameAudioController : MonoBehaviour
     [SerializeField] private float _votingWarningSecondsBeforeEnd = 10f;
     [Tooltip("Plays for everyone the moment voting closes (whether by everyone submitting or by timeout).")]
     [SerializeField] private AudioClip _votingEndedClip;
+    [Tooltip("Plays for everyone right before the pendulum starts moving.")]
+    [SerializeField] private AudioClip _pendulumCueClip;
 
     private RoundManager _round;
     private bool _votingWarningPlayedThisTurn;
@@ -62,6 +64,13 @@ public class GameAudioController : MonoBehaviour
         _round.phase.onChanged += OnPhaseChanged;
         _round.onLocalGoalReceived += OnLocalGoalReceived;
         _round.onVotingEnded += OnVotingEnded;
+
+        // Temporary diagnostic: if this ever prints more than once without a
+        // matching "unbound" log in between, there's more than one
+        // GameAudioController subscribed at once - each with its own
+        // independent de-dupe state - which alone would explain a cue
+        // playing twice regardless of how many times the server sends it.
+        Debug.Log($"[GameAudioController:{GetEntityId()}] bound to RoundManager.");
     }
 
     private void OnDestroy()
@@ -87,6 +96,10 @@ public class GameAudioController : MonoBehaviour
                 _votingCountdown = _round.votingDuration;
                 _votingCountdownRunning = !IsActivePlayer(); // the active player isn't voting - no warning for them
                 break;
+            case RoundPhase.PendulumCue:
+                _votingCountdownRunning = false;
+                PlaySfx(_pendulumCueClip);
+                break;
             default:
                 _votingCountdownRunning = false;
                 break;
@@ -95,9 +108,18 @@ public class GameAudioController : MonoBehaviour
 
     private void OnLocalGoalReceived(float min, float max)
     {
+        // Temporary diagnostic - shows every call this specific instance
+        // receives, its current turn number, and whether the de-dupe guard
+        // let it through. If two PLAYING lines appear for the SAME turn
+        // number, the guard itself is broken; if they show DIFFERENT
+        // instance ids, it's a duplicate-component problem instead.
+        bool willPlay = _lastYourTurnCueTurnNumber != _round.turnNumber.value;
+        Debug.Log($"[GameAudioController:{GetEntityId()}] onLocalGoalReceived, turn={_round.turnNumber.value}, " +
+                  $"lastPlayedTurn={_lastYourTurnCueTurnNumber} -> {(willPlay ? "PLAYING" : "skipped (already played this turn)")}");
+
         // This can fire more than once per turn (the targeting panel
         // defensively re-requests it) - only play the cue once per turn.
-        if (_lastYourTurnCueTurnNumber == _round.turnNumber.value)
+        if (!willPlay)
             return;
 
         _lastYourTurnCueTurnNumber = _round.turnNumber.value;

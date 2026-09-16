@@ -1,16 +1,23 @@
 using UnityEngine;
 
 /// <summary>
-/// Purely cosmetic - just reflects RoundManager.pendulumValue. Replaces the
-/// old empty PendulumScript.cs stub; the pendulum's actual value lives on
-/// RoundManager since it doesn't need its own networked object.
+/// Reflects RoundManager.pendulumValue, animating smoothly to each new
+/// value over its own independently-tunable duration - deliberately not
+/// synced to RoundManager's PendulumMoving phase duration; the two are
+/// tuned separately by design and only need to roughly match if you want
+/// the visual to finish around when the server moves on to scoring.
 /// </summary>
 public class PendulumVisual : MonoBehaviour
 {
     [SerializeField] private Transform _pivot;
     [SerializeField] private float _swingRangeDegrees = 45f;
+    [SerializeField] private float _swingAnimationDuration = 2f;
 
     private RoundManager _round;
+    private float _fromValue = 0.5f;
+    private float _toValue = 0.5f;
+    private float _animElapsed;
+    private bool _animating;
 
     private void Update()
     {
@@ -21,8 +28,23 @@ public class PendulumVisual : MonoBehaviour
                 return;
 
             _round.pendulumValue.onChanged += OnPendulumChanged;
-            OnPendulumChanged(_round.pendulumValue.value);
+
+            // Snap to whatever the value already is on first bind (e.g. a
+            // late join) - only future changes should actually animate.
+            _fromValue = _toValue = _round.pendulumValue.value;
+            ApplyAngle(_toValue);
+            return;
         }
+
+        if (!_animating)
+            return;
+
+        _animElapsed += Time.deltaTime;
+        float t = _swingAnimationDuration > 0f ? Mathf.Clamp01(_animElapsed / _swingAnimationDuration) : 1f;
+        ApplyAngle(Mathf.Lerp(_fromValue, _toValue, t));
+
+        if (t >= 1f)
+            _animating = false;
     }
 
     private void OnDestroy()
@@ -32,6 +54,23 @@ public class PendulumVisual : MonoBehaviour
     }
 
     private void OnPendulumChanged(float normalized)
+    {
+        // Start from wherever the swing visually is right now (not
+        // necessarily _toValue, if this fires again mid-animation) so a
+        // re-trigger blends smoothly instead of jumping.
+        _fromValue = CurrentAnimatedValue();
+        _toValue = normalized;
+        _animElapsed = 0f;
+        _animating = true;
+    }
+
+    private float CurrentAnimatedValue()
+    {
+        float t = _swingAnimationDuration > 0f ? Mathf.Clamp01(_animElapsed / _swingAnimationDuration) : 1f;
+        return Mathf.Lerp(_fromValue, _toValue, t);
+    }
+
+    private void ApplyAngle(float normalized)
     {
         if (!_pivot)
             return;

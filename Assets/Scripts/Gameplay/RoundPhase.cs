@@ -3,8 +3,12 @@ public enum RoundPhase
     WaitingForPlayers,
     RoundIntro,
     Targeting,
+    TargetingComplete,
     VotingOpen,
-    Revealing,
+    VotingComplete,
+    RevealMoving,
+    PendulumCue,
+    PendulumMoving,
     Scoring,
     TurnComplete,
     GameOver
